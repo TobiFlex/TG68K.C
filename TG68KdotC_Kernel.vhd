@@ -1315,7 +1315,11 @@ PROCESS (clk, Reset, FlagsSR, last_data_read, OP2out, exec)
 					FlagsSR(2 downto 0) <=rIPL_nr;
 				END IF;	
 				IF exec(to_SR)='1' THEN
-					FlagsSR(7 downto 0) <= SRin;	--SR
+					IF (cpu(1) = '0') THEN
+						FlagsSR(7 downto 0) <= SRin and x"a7"; -- mask out unused SR bits 68000/68010
+					ELSE
+						FlagsSR(7 downto 0) <= SRin and x"f7"; -- mask out unused SR bit 68020
+					END IF;
 					FC(2) <= SRin(5);
 				ELSIF exec(update_FC)='1' THEN
 					FC(2) <= FlagsSR(5);
