@@ -21,6 +21,7 @@
 ------------------------------------------------------------------------------
 ------------------------------------------------------------------------------
 
+-- 06.11.2019 TG bugfix flags and stackframe DIVU
 -- 04.11.2019 TG insert RTE from TH
 -- 03.11.2019 TG insert TrapV from TH 
 -- 03.11.2019 TG bugfix MUL 64Bit 
@@ -130,6 +131,8 @@ end TG68KdotC_Kernel;
 architecture logic of TG68KdotC_Kernel is
 
 
+	signal use_VBR_Stackframe	: std_logic;
+
 	signal syncReset			: std_logic_vector(3 downto 0);
 	signal Reset				: std_logic;
 	signal clkena_lw			: std_logic;
@@ -149,8 +152,8 @@ architecture logic of TG68KdotC_Kernel is
 	signal exe_opcode			: std_logic_vector(15 downto 0);
 	signal sndOPC				: std_logic_vector(15 downto 0);
 
-  signal exe_pc                 : std_logic_vector(31 downto 0);--TH
-  signal last_opc_pc            : std_logic_vector(31 downto 0);--TH
+	signal exe_pc				: std_logic_vector(31 downto 0);--TH
+	signal last_opc_pc		: std_logic_vector(31 downto 0);--TH
 	signal last_opc_read		: std_logic_vector(15 downto 0);
 	signal registerin			: std_logic_vector(31 downto 0);
 	signal reg_QA				: std_logic_vector(31 downto 0);
@@ -263,6 +266,7 @@ architecture logic of TG68KdotC_Kernel is
 	signal trap_SR				: std_logic_vector(7 downto 0);
 	signal make_trace			: std_logic;
 	signal make_berr			: std_logic;
+	signal useStackframe2	: std_logic;
 	
 	signal set_stop			: bit;
 	signal stop					: bit;
@@ -423,6 +427,13 @@ ALU: TG68K_ALU
 			IF clkena_in='1' THEN
 				syncReset <= syncReset(2 downto 0)&'1';
 				Reset <= NOT syncReset(3);	
+			END IF;
+		END IF;
+		IF rising_edge(clk) THEN
+			IF VBR_Stackframe=1 or (cpu(0)='1' and VBR_Stackframe=2) THEN
+				use_VBR_Stackframe<='1';
+			ELSE
+				use_VBR_Stackframe<='0';
 			END IF;
 		END IF;
 	END PROCESS;
@@ -689,6 +700,7 @@ PROCESS (clk)
 				use_direct_data <= '0';
 				Z_error <= '0';
 			ELSIF clkena_lw='1' THEN
+				useStackframe2<='0';
 				direct_data <= '0';
 				IF state="11" THEN
 					exec_write_back <= '0';
@@ -742,10 +754,12 @@ PROCESS (clk)
 -- paste and copy form TH	---------	
 				elsif micro_state=trap00 THEN
 					data_write_tmp <= exe_pc; --TH
+					useStackframe2<='1';
 				elsif micro_state = trap0 then
 		  -- this is only active for 010+ since in 000 writePC is
 		  -- true in state trap0
-					if trap_trace='1' or set_exec(opcTRAPV) = '1' then
+--					if trap_trace='1' or set_exec(opcTRAPV)='1' or Z_error='1' then
+					IF	useStackframe2='1' THEN
 						-- stack frame format #2
 						data_write_tmp(15 downto 0) <= "0010" & trap_vector(11 downto 0); --TH
 					else
@@ -806,7 +820,7 @@ PROCESS (brief, OP1out, OP1outbrief, cpu)
 -- MEM_IO 
 -----------------------------------------------------------------------------
 PROCESS (clk, setdisp, memaddr_a, briefdata, memaddr_delta, setdispbyte, datatype, interrupt, rIPL_nr, IPL_vec,
-         memaddr_reg, reg_QA, use_base, VBR, last_data_read, trap_vector, exec, set, cpu)
+         memaddr_reg, reg_QA, use_base, VBR, last_data_read, trap_vector, exec, set, cpu, use_VBR_Stackframe)
 	BEGIN
 		
 		IF rising_edge(clk) THEN
@@ -821,7 +835,7 @@ PROCESS (clk, setdisp, memaddr_a, briefdata, memaddr_delta, setdispbyte, datatyp
 				IF trap_illegal='1' THEN
 					trap_vector(9 downto 0) <= "00" & X"10";
 				END IF;	
-				IF z_error='1' THEN
+				IF set_Z_error='1' THEN
 					trap_vector(9 downto 0) <= "00" & X"14";
 				END IF;	
 				IF exec(trap_chk)='1' THEN
@@ -850,10 +864,10 @@ PROCESS (clk, setdisp, memaddr_a, briefdata, memaddr_delta, setdispbyte, datatyp
 				END IF;	
 			END IF;
 		END IF;
-		IF VBR_Stackframe=0 OR (cpu(0)='0' AND VBR_Stackframe=2) THEN
-			trap_vector_vbr <= trap_vector;
-		ELSE		
+		IF use_VBR_Stackframe='1' THEN
 			trap_vector_vbr <= trap_vector+VBR;
+		ELSE		
+			trap_vector_vbr <= trap_vector;
 		END IF;		
 		
 		memaddr_a(4 downto 0) <= "00000";
@@ -1132,9 +1146,6 @@ PROCESS (clk, IPL, setstate, state, exec_write_back, set_direct_data, next_micro
 					IF decodeOPC='1' OR exec(ld_rot_cnt)='1' OR rot_cnt/="000001" THEN
 						rot_cnt <= set_rot_cnt;
 					END IF;
---					IF setstate(1)='1' AND set_datatype="00" THEN
---						byte <= '1';
---					END IF;
 					
 					IF set_Suppress_Base='1' THEN
 						Suppress_Base <= '1';
@@ -1337,7 +1348,7 @@ PROCESS (clk, Reset, FlagsSR, last_data_read, OP2out, exec)
 PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state, decodeOPC, state, setexecOPC, Flags, FlagsSR, direct_data, build_logical,
 		 build_bcd, set_Z_error, trapd, movem_run, last_data_read, set, set_V_Flag, z_error, trap_trace, trap_interrupt,
 		 SVmode, preSVmode, stop, long_done, ea_only, setstate, execOPC, exec_write_back, exe_datatype,
-		 datatype, interrupt, c_out, trapmake, rot_cnt, brief, addr, trap_trapv, last_data_in,
+		 datatype, interrupt, c_out, trapmake, rot_cnt, brief, addr, trap_trapv, last_data_in, use_VBR_Stackframe,
 		 long_start, set_datatype, sndOPC, set_exec, exec, ea_build_now, reg_QA, reg_QB, make_berr, trap_berr)
 	BEGIN
 		TG68_PC_brw <= '0';	
@@ -1410,16 +1421,20 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 			WHEN OTHERS => datatype <= "10";	--Long
 		END CASE;
 		
+		IF interrupt='1' AND trap_berr='1' THEN
+			next_micro_state <= trap0;
+			IF preSVmode='0' THEN
+				set(changeMode) <= '1';
+			END IF;
+			setstate <= "01";
+		END IF;	
 		IF trapmake='1' AND trapd='0' THEN
--- paste and copy form TH	---------	
-			if trap_trapv = '1' and (VBR_Stackframe = 1 or (cpu(0) = '1' and VBR_Stackframe = 2)) then
+			IF use_VBR_Stackframe='1' AND (trap_trapv='1' or set_Z_error='1') THEN
 				next_micro_state <= trap00;
 			else
 				next_micro_state <= trap0;
 			end if;
-------------------------------------
---			next_micro_state <= trap0;
-			IF VBR_Stackframe=0 OR (cpu(0)='0' AND VBR_Stackframe=2) THEN
+			IF use_VBR_Stackframe='0' THEN
 				set(writePC_add) <= '1';
 --				set_datatype <= "10";
 			END IF;
@@ -1428,16 +1443,9 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 			END IF;
 			setstate <= "01";
 		END IF;	
-		IF interrupt='1' AND trap_berr='1' THEN
-			next_micro_state <= trap0;
-			IF preSVmode='0' THEN
-				set(changeMode) <= '1';
-			END IF;
-			setstate <= "01";
-		END IF;	
 		IF micro_state=int1 OR (interrupt='1' AND trap_trace='1') THEN
 -- paste and copy form TH	---------	
-			if trap_trace='1' AND (VBR_Stackframe=1 or (cpu(0)='1' AND VBR_Stackframe=2)) then
+			if trap_trace='1' AND use_VBR_Stackframe='1' then
 				next_micro_state <= trap00;  --TH
 			else
 				next_micro_state <= trap0;
@@ -1453,14 +1461,6 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 			setstate <= "01";
 		END IF;	
 	if micro_state = int1 or (interrupt = '1' and trap_trace = '1') then
-						if trap_trace='1' AND (VBR_Stackframe=1 or (cpu(0)='1' AND VBR_Stackframe=2)) then
-						  next_micro_state <= trap00;  --TH
-						else
-	  next_micro_state <= trap0;
-						end if;
-	  -- if cpu(0)='0' then
-	  -- set_datatype <= "10";
-	  -- end if;
 	  if preSVmode = '0' then
 		set(changeMode) <= '1';
 	  end if;
@@ -2282,7 +2282,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 										END IF;
 										
 									WHEN "1110110" =>  									--trapv
-										set_exec(opcTRAPV) <= '1';	--TH
+--										set_exec(opcTRAPV) <= '1';	--TH
 										IF decodeOPC='1' THEN
 											setstate <= "01";
 										END IF;	
@@ -2292,7 +2292,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 										END IF;
 										
 									WHEN "1111010"|"1111011" =>  									--movec
-										IF VBR_Stackframe=0 OR (cpu(0)='0' AND VBR_Stackframe=2) THEN
+										IF cpu="00" THEN
 											trap_illegal <= '1';
 											trapmake <= '1';
 										ELSIF SVmode='0' THEN
@@ -3122,7 +3122,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 					set(presub) <= '1';
 					setstackaddr <='1';
 					setstate <= "11";
-					IF VBR_Stackframe=1 OR (cpu(0)='1' AND VBR_Stackframe=2) THEN	--68010
+					IF use_VBR_Stackframe='1' THEN	--68010
 						set(writePC_add) <= '1';
 						datatype <= "01";
 --						set_datatype <= "10";
@@ -3197,7 +3197,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 					set(postadd) <= '1';
 					setstackaddr <= '1';
 					set(directPC) <= '1';	
-					IF VBR_Stackframe=0 OR (cpu(0)='0' AND VBR_Stackframe=2) OR opcode(2)='1' THEN	--opcode(2)='1' => opcode is RTR
+					IF use_VBR_Stackframe='0' OR opcode(2)='1' THEN	--opcode(2)='1' => opcode is RTR
 						set(update_FC) <= '1';
 						set(direct_delta) <= '1';	
 					END IF;
@@ -3205,7 +3205,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 				WHEN rte2 =>		-- RTE
 					datatype <= "01";
 					set(update_FC) <= '1';
-					IF (VBR_Stackframe=1 OR (cpu(0)='1' AND VBR_Stackframe=2)) AND opcode(2)='0' THEN
+					IF use_VBR_Stackframe='1' AND opcode(2)='0' THEN
 												-- 010+ reads another word
 						setstate <= "10";
 						set(postadd) <= '1';
@@ -3430,7 +3430,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 	case brief(11 downto 0) is
 	  when X"002" => movec_data <= "0000000000000000000000000000" & (CACR AND "0011");
 
-	  when X"801" => --if VBR_Stackframe=1 or (cpu(0)='1' and VBR_Stackframe=2) then
+	  when X"801" => 
 		movec_data <= VBR;
 		--end if;
 	  when others => NULL;

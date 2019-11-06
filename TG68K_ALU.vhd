@@ -237,7 +237,7 @@ PROCESS (OP2out, reg_QB, opcode, OP1out, OP1in, exe_datatype, addsub_q, execOPC,
 		ELSIF exec(opcDIVU)='1' AND DIV_Mode/=3 THEN
 			IF exe_opcode(15)='1' OR DIV_Mode=0 THEN
 --			IF exe_opcode(15)='1' THEN
-				OP1in <= result_div(47 downto 32)&result_div(15 downto 0);	
+				OP1in <= result_div(47 downto 32)&result_div(15 downto 0);	--word 
 			ELSE		--64bit
 				IF exec(write_reminder)='1' THEN
 					OP1in <= result_div(63 downto 32);
@@ -983,8 +983,10 @@ PROCESS (clk, Reset, exe_opcode, exe_datatype, Flags, last_data_read, OP2out, fl
 					ELSIF exec(opcDIVU)='1' AND DIV_Mode/=3 THEN
 						IF V_Flag='1' THEN	
 							Flags(3 downto 0) <= "1010";
-						ELSE
+						ELSIF exe_opcode(15)='1' OR DIV_Mode=0 THEN
 							Flags(3 downto 0) <= OP1IN(15)&flag_z(1)&"00";
+						ELSE
+							Flags(3 downto 0) <= OP1IN(31)&flag_z(2)&"00";
 						END IF;
 					ELSIF exec(write_reminder)='1' AND MUL_Mode/=3 THEN -- z-flag MULU.l
 						Flags(3) <= set_flags(3);

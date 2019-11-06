@@ -116,9 +116,8 @@ package TG68K_Pack is
 	constant store_ea_packdata	: integer := 80; --
 	constant exec_BS				: integer := 81; --
 	constant hold_OP2				: integer := 82; --
-	constant opcTRAPV				: integer := 83; --
 
-	constant lastOpcBit			: integer := 83;
+	constant lastOpcBit			: integer := 82;
 
 	component TG68K_ALU
 	generic(
