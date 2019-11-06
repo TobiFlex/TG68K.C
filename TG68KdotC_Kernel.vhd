@@ -21,6 +21,7 @@
 ------------------------------------------------------------------------------
 ------------------------------------------------------------------------------
 
+-- 06.11.2019 TG bugfix CHK
 -- 06.11.2019 TG bugfix flags and stackframe DIVU
 -- 04.11.2019 TG insert RTE from TH
 -- 03.11.2019 TG insert TrapV from TH 
@@ -704,8 +705,8 @@ PROCESS (clk)
 				direct_data <= '0';
 				IF state="11" THEN
 					exec_write_back <= '0';
-				ELSIF setstate="10" AND write_back='1' THEN
---		elsif setstate = "10" and write_back = '1' and next_micro_state = idle then  --???
+--				ELSIF setstate="10" AND write_back='1' THEN
+				ELSIF setstate = "10" AND write_back = '1' AND next_micro_state = idle THEN  --fix importent for pinball
 					exec_write_back <= '1';
 				END IF;	
 
@@ -1429,7 +1430,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 			setstate <= "01";
 		END IF;	
 		IF trapmake='1' AND trapd='0' THEN
-			IF use_VBR_Stackframe='1' AND (trap_trapv='1' or set_Z_error='1') THEN
+			IF use_VBR_Stackframe='1' AND (trap_trapv='1' OR set_Z_error='1' OR exec(opcCHK)='1') THEN
 				next_micro_state <= trap00;
 			else
 				next_micro_state <= trap0;
@@ -1776,14 +1777,14 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 					ELSE								--chk
 						IF opcode(7)='1' THEN
 							datatype <= "01";	--Word
-								set(trap_chk) <= '1';	
+							set(trap_chk) <= '1';	
 							IF (c_out(1)='0' OR OP1out(15)='1' OR OP2out(15)='1') AND exec(opcCHK)='1' THEN
 								trapmake <= '1';
 							END IF;
 						ELSIF cpu(1)='1' THEN   --chk long for 68020
 							datatype <= "10";	--Long
-								set(trap_chk) <= '1';	
-							IF (c_out(2)='1' OR OP1out(31)='1' OR OP2out(31)='1') AND exec(opcCHK)='1' THEN
+							set(trap_chk) <= '1';	
+							IF (c_out(2)='0' OR OP1out(31)='1' OR OP2out(31)='1') AND exec(opcCHK)='1' THEN
 								trapmake <= '1';
 							END IF;
 						ELSE

@@ -316,7 +316,7 @@ PROCESS (OP1out, OP2out, execOPC, Flags, long_start, movem_presub, exe_datatype,
 				addsub_b <= "00000000000000000000000000000010";
 			END IF;
 		ELSE	
-			IF (exec(use_XZFlag)='1' AND Flags(4)='1') OR exec(opcCHK)='1' THEN
+			IF (exec(use_XZFlag)='1' AND Flags(4)='1') OR exec(opcCHK)='1' THEN 
 				c_in(0) <= '1';
 			END IF;
 			opaddsub <= exec(addsub);
@@ -1029,7 +1029,8 @@ PROCESS (clk, Reset, exe_opcode, exe_datatype, Flags, last_data_read, OP2out, fl
 						ELSE	
 							Flags(2) <='0';
 						END IF;	
-						Flags(1 downto 0) <= "00";
+						Flags(1) <= '0';
+						Flags(0) <= NOT set_flags(0);
 					END IF;
 				END IF;	
 			END IF;	
