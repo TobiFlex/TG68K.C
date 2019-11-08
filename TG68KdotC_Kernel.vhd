@@ -21,6 +21,7 @@
 ------------------------------------------------------------------------------
 ------------------------------------------------------------------------------
 
+-- 08.11.2019 TG bugfix movem in 68020 mode
 -- 06.11.2019 TG bugfix CHK
 -- 06.11.2019 TG bugfix flags and stackframe DIVU
 -- 04.11.2019 TG insert RTE from TH
@@ -3021,6 +3022,9 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 						setstate <="01";
 						IF opcode(5 downto 3)="100" THEN
 							set(mem_addsub) <= '1';
+							IF cpu(1)='1' THEN
+								set(Regwrena) <= '1';	--tg
+							END IF;
 						END IF;
 						next_micro_state <= movem2;
 					END IF;
