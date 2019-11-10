@@ -1342,6 +1342,7 @@ PROCESS (clk, Reset, FlagsSR, last_data_read, OP2out, exec)
 					FC(2) <= '1';
 				END IF;	
 				IF cpu(1)='0' THEN
+					FlagsSR(4) <= '0';
 					FlagsSR(6) <= '0';
 				END IF;
 				FlagsSR(3) <= '0';
