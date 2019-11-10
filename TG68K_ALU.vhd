@@ -386,7 +386,9 @@ PROCESS (OP1out, OP2out, exec, add_result, bcd_pur, bcd_a, bcd_kor, halve_carry,
 --			bcd_pur <= ('0'&OP1out(7 downto 0)&'0') - ('0'&OP2out(7 downto 0)&Flags(4));
 			bcd_a <= bcd_pur(9 downto 1) - bcd_kor;
 		END IF;
-	Vflag_a <= '0'; --TG 01.11.2019 only for cputest -- but other behaiver in real 68000 Hardware ??? I must check this later
+--		IF cpu(1)='1' THEN
+			Vflag_a <= '0'; --TG 01.11.2019 only for cputest -- but other behaiver in real 68000 Hardware ??? I must check this later
+--		END IF;
 		bcd_a_carry <= bcd_pur(9) OR bcd_a(8);
 	END PROCESS;
 			

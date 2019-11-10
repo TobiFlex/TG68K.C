@@ -21,6 +21,7 @@
 ------------------------------------------------------------------------------
 ------------------------------------------------------------------------------
 
+-- 10.11.2019 TG inset TRAPcc
 -- 08.11.2019 TG bugfix movem in 68020 mode
 -- 06.11.2019 TG bugfix CHK
 -- 06.11.2019 TG bugfix flags and stackframe DIVU
@@ -68,9 +69,9 @@
 -- CHK2
 -- CMP2
 -- cpXXX Coprozessor stuff
--- TRAPcc
 
 -- done 020:
+-- TRAPcc
 -- PACK
 -- UNPK
 -- Bitfields
@@ -88,22 +89,15 @@ use work.TG68K_Pack.all;
 
 entity TG68KdotC_Kernel is
 	generic(
-		SR_Read : integer:= 1;				--0=>user,		1=>privileged,		2=>switchable with CPU(0)
-		VBR_Stackframe : integer:= 1;		--0=>no,			1=>yes/extended,	2=>switchable with CPU(0)
-		extAddr_Mode : integer:= 1;		--0=>no,			1=>yes,				2=>switchable with CPU(1)
-		MUL_Mode : integer := 1;			--0=>16Bit,		1=>32Bit,			2=>switchable with CPU(1),  3=>no MUL,  
-		MUL_Hardware : integer := 0;		--0=>no,			1=>yes,  
-		DIV_Mode : integer := 1;			--0=>16Bit,		1=>32Bit,			2=>switchable with CPU(1),  3=>no DIV,  
-		BarrelShifter : integer := 2;		--0=>no,			1=>yes,				2=>switchable with CPU(1)  
-		BitField : integer := 1				--0=>no,			1=>yes,				2=>switchable with CPU(1)  
---		SR_Read : integer:= 0;				--0=>user,		1=>privileged,		2=>switchable with CPU(0)
---		VBR_Stackframe : integer:= 0;		--0=>no,			1=>yes/extended,	2=>switchable with CPU(0)
---		extAddr_Mode : integer:= 0;		--0=>no,			1=>yes,				2=>switchable with CPU(1)
---		MUL_Mode : integer := 0;			--0=>16Bit,		1=>32Bit,			2=>switchable with CPU(1),  3=>no MUL,  
---		MUL_Hardware : integer := 1;		--0=>no,			1=>yes,  
---		DIV_Mode : integer := 0;			--0=>16Bit,		1=>32Bit,			2=>switchable with CPU(1),  3=>no DIV,  
---		BarrelShifter : integer := 0;		--0=>no,			1=>yes,				2=>switchable with CPU(1)  
---		BitField : integer := 0				--0=>no,			1=>yes,				2=>switchable with CPU(1)  
+		SR_Read : integer:= 2;				--0=>user,		1=>privileged,		2=>switchable with CPU(0)
+		VBR_Stackframe : integer:= 2;		--0=>no,			1=>yes/extended,	2=>switchable with CPU(0)
+		extAddr_Mode : integer:= 2;		--0=>no,			1=>yes,				2=>switchable with CPU(1)
+		MUL_Mode : integer := 2;			--0=>16Bit,		1=>32Bit,			2=>switchable with CPU(1),  3=>no MUL,  
+		DIV_Mode : integer := 2;			--0=>16Bit,		1=>32Bit,			2=>switchable with CPU(1),  3=>no DIV,  
+		BitField : integer := 2;			--0=>no,			1=>yes,				2=>switchable with CPU(1) 
+		
+		BarrelShifter : integer := 1;		--0=>no,			1=>yes,				2=>switchable with CPU(1)  
+		MUL_Hardware : integer := 1		--0=>no,			1=>yes,  
 		);
 	port(clk						: in std_logic;
 		nReset					: in std_logic;			--low active
@@ -262,6 +256,7 @@ architecture logic of TG68KdotC_Kernel is
 	signal trap_1111			: bit;
 	signal trap_trap			: bit;
 	signal trap_trapv			: bit;
+	signal trap_trapcc		: bit;
 	signal trap_interrupt	: bit;
 	signal trapmake			: bit;
 	signal trapd				: bit;
@@ -706,8 +701,9 @@ PROCESS (clk)
 				direct_data <= '0';
 				IF state="11" THEN
 					exec_write_back <= '0';
---				ELSIF setstate="10" AND write_back='1' THEN
-				ELSIF setstate = "10" AND write_back = '1' AND next_micro_state = idle THEN  --fix importent for pinball
+				ELSIF setstate="10" AND write_back='1' THEN
+--				ELSIF setstate = "10" AND write_back = '1' AND next_micro_state = idle THEN  	--this shut be a fix for pinball
+--																														--but it destory pack -(ax),-(ay) and unpack
 					exec_write_back <= '1';
 				END IF;	
 
@@ -949,7 +945,7 @@ PROCESS (clk, setdisp, memaddr_a, briefdata, memaddr_delta, setdispbyte, datatyp
 -- PC Calc + fetch opcode
 -----------------------------------------------------------------------------
 PROCESS (clk, IPL, setstate, state, exec_write_back, set_direct_data, next_micro_state, stop, make_trace, make_berr, IPL_nr, FlagsSR, set_rot_cnt, opcode, writePCbig, set_exec, exec,
-        PC_dataa, PC_datab, setnextpass, last_data_read, TG68_PC_brw, TG68_PC_word, Z_error, trap_trap, trap_trapv, interrupt, tmp_TG68_PC, TG68_PC)
+        PC_dataa, PC_datab, setnextpass, last_data_read, TG68_PC_brw, TG68_PC_word, Z_error, trap_trap, trap_trapv, trap_trapcc, interrupt, tmp_TG68_PC, TG68_PC)
 	BEGIN
 	
 		PC_dataa <= TG68_PC;
@@ -1180,6 +1176,15 @@ PROCESS (clk, IPL, setstate, state, exec_write_back, set_direct_data, next_micro
 							nextpass <= '1';	
 						END IF;
 					END IF;
+
+-- why do not I need this ??? What are the immediate data for ???					
+--					IF	trap_trapcc='1' THEN
+--						IF opcode(2 downto 0)="100" THEN
+--							exe_pc <= (others => '0');
+--						ELSE
+--							exe_pc <= last_data_read;
+--						END IF;
+--					END IF;
 	
 					IF decodeOPC='1' OR interrupt='1' THEN
 						trap_SR <= FlagsSR;
@@ -1350,7 +1355,7 @@ PROCESS (clk, Reset, FlagsSR, last_data_read, OP2out, exec)
 PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state, decodeOPC, state, setexecOPC, Flags, FlagsSR, direct_data, build_logical,
 		 build_bcd, set_Z_error, trapd, movem_run, last_data_read, set, set_V_Flag, z_error, trap_trace, trap_interrupt,
 		 SVmode, preSVmode, stop, long_done, ea_only, setstate, execOPC, exec_write_back, exe_datatype,
-		 datatype, interrupt, c_out, trapmake, rot_cnt, brief, addr, trap_trapv, last_data_in, use_VBR_Stackframe,
+		 datatype, interrupt, c_out, trapmake, rot_cnt, brief, addr, trap_trapv, trap_trapcc, last_data_in, use_VBR_Stackframe,
 		 long_start, set_datatype, sndOPC, set_exec, exec, ea_build_now, reg_QA, reg_QB, make_berr, trap_berr)
 	BEGIN
 		TG68_PC_brw <= '0';	
@@ -1387,6 +1392,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 		trap_1111 <='0';
 		trap_trap <='0';
 		trap_trapv <= '0';
+		trap_trapcc <= '0';
 		trapmake <='0';
 		set_vectoraddr <='0';
 		writeSR <= '0';
@@ -2284,7 +2290,6 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 										END IF;
 										
 									WHEN "1110110" =>  									--trapv
---										set_exec(opcTRAPV) <= '1';	--TH
 										IF decodeOPC='1' THEN
 											setstate <= "01";
 										END IF;	
@@ -2330,13 +2335,35 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 --					
 ---- 0101 ----------------------------------------------------------------------------		
 			WHEN "0101" => 								--subq, addq	
-				
 					IF opcode(7 downto 6)="11" THEN --dbcc
 						IF opcode(5 downto 3)="001" THEN --dbcc
 							IF decodeOPC='1' THEN
 								next_micro_state <= dbcc1;
 								set(OP2out_one) <= '1';
 								data_is_source <= '1';
+							END IF;
+						ELSIF opcode(5 downto 3)="111" AND (opcode(2 downto 1)="01" OR opcode(2 downto 0)="100") THEN	--trapcc
+							IF cpu(1)='1' THEN							-- only 68020+
+								IF opcode(2 downto 1)="01" THEN
+									IF decodeOPC='1' THEN
+										IF opcode(0)='1' THEN			--long
+											set(longaktion) <= '1';
+										END IF;	
+										next_micro_state <= nop;
+									END IF;
+								ELSE 	
+									IF decodeOPC='1' THEN
+										setstate <= "01";
+									END IF;	
+								END IF;
+								trap_trapcc<='1';
+								IF exe_condition='1' AND decodeOPC='0' THEN
+									trap_trapv <= '1';
+									trapmake <= '1';
+								END IF;
+							ELSE
+								trap_illegal <= '1';
+								trapmake <= '1';
 							END IF;
 						ELSE				--Scc
 							datatype <= "00";			--Byte
@@ -3116,7 +3143,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 					set(ea_data_OP2) <= '1';
 					
 -- paste and copy form TH	---------	
-				when trap00 =>          -- TRAP format #2
+				WHEN trap00 =>          -- TRAP format #2
 					next_micro_state <= trap0;
 					set(presub) <= '1';
 					setstackaddr <='1';
