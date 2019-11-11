@@ -37,6 +37,7 @@ generic(
 	port(clk						: in std_logic;
 		Reset						: in std_logic;
 		clkena_lw				: in std_logic:='1';
+		CPU						: in std_logic_vector(1 downto 0):="00";  -- 00->68000  01->68010  11->68020(only some parts - yet)
 		execOPC					: in bit;
 		decodeOPC				: in bit;
 		exe_condition			: in std_logic;
@@ -358,7 +359,7 @@ PROCESS (OP1out, OP2out, execOPC, Flags, long_start, movem_presub, exe_datatype,
 ------------------------------------------------------------------------------
 --ALU
 ------------------------------------------------------------------------------		
-PROCESS (OP1out, OP2out, exec, add_result, bcd_pur, bcd_a, bcd_kor, halve_carry, c_in)
+PROCESS (OP1out, OP2out, CPU, exec, add_result, bcd_pur, bcd_a, bcd_kor, halve_carry, c_in)
 	BEGIN
 --BCD_ARITH-------------------------------------------------------------------
 --04.04.2017 by Tobiflex - BCD handling with all undefined behavior!
@@ -386,9 +387,9 @@ PROCESS (OP1out, OP2out, exec, add_result, bcd_pur, bcd_a, bcd_kor, halve_carry,
 --			bcd_pur <= ('0'&OP1out(7 downto 0)&'0') - ('0'&OP2out(7 downto 0)&Flags(4));
 			bcd_a <= bcd_pur(9 downto 1) - bcd_kor;
 		END IF;
---		IF cpu(1)='1' THEN
-			Vflag_a <= '0'; --TG 01.11.2019 only for cputest -- but other behaiver in real 68000 Hardware ??? I must check this later
---		END IF;
+		IF cpu(1)='1' THEN
+			Vflag_a <= '0'; --68020
+		END IF;
 		bcd_a_carry <= bcd_pur(9) OR bcd_a(8);
 	END PROCESS;
 			
@@ -1032,7 +1033,8 @@ PROCESS (clk, Reset, exe_opcode, exe_datatype, Flags, last_data_read, OP2out, fl
 							Flags(2) <='0';
 						END IF;	
 						Flags(1) <= '0';
-						Flags(0) <= NOT set_flags(0);
+--						Flags(0) <= NOT set_flags(0);
+						Flags(0) <= '0';
 					END IF;
 				END IF;	
 			END IF;	

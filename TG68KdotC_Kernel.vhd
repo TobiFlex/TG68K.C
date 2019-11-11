@@ -349,6 +349,7 @@ ALU: TG68K_ALU
 	port map(
 		clk => clk,								--: in std_logic;
 		Reset => Reset,						--: in std_logic;
+		CPU => CPU,								--: in std_logic_vector(1 downto 0):="00";  -- 00->68000  01->68010  11->68020(only some parts - yet)
 		clkena_lw => clkena_lw,				--: in std_logic:='1';
 		execOPC => execOPC,					--: in bit;
 		decodeOPC => decodeOPC,				--: in bit;
@@ -701,9 +702,10 @@ PROCESS (clk)
 				direct_data <= '0';
 				IF state="11" THEN
 					exec_write_back <= '0';
-				ELSIF setstate="10" AND write_back='1' THEN
+--				ELSIF setstate="10" AND write_back='1' THEN
 --				ELSIF setstate = "10" AND write_back = '1' AND next_micro_state = idle THEN  	--this shut be a fix for pinball
 --																														--but it destory pack -(ax),-(ay) and unpack
+				ELSIF setstate = "10" AND write_back = '1' AND (opcode(15 downto 12)/="0100" OR next_micro_state = idle) THEN  	--this shut be a fix for pinball --thanks slingshot
 					exec_write_back <= '1';
 				END IF;	
 
@@ -1557,7 +1559,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 			END CASE;
 		END IF;
 ------------------------------------------------------------------------------
---prepere opcode
+--prepare opcode
 ------------------------------------------------------------------------------		
 		CASE opcode(15 downto 12) IS
 -- 0000 ----------------------------------------------------------------------------		
