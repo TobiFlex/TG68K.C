@@ -1911,16 +1911,24 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 				END IF;
 ---- 0100 ----------------------------------------------------------------------------		
 			WHEN "0100" =>				--rts_group
-				IF opcode(8)='1' THEN		--lea
-					IF opcode(6)='1' THEN		--lea
-						IF opcode(7)='1' THEN		
-							source_lowbits <= '1';
-							IF opcode(5 downto 4)="00" THEN		--extb.l
+				IF opcode(8)='1' THEN		--lea, extb.l, chk
+					IF opcode(6)='1' THEN		--lea, extb.l
+						IF opcode(11 downto 9)="100" AND opcode(5 downto 3)="000" THEN --extb.l
+							IF opcode(7)='1' AND cpu(1)='1' THEN
+								source_lowbits <= '1';
 								set_exec(opcEXT) <= '1';
 								set_exec(opcEXTB) <= '1';
 								set_exec(opcMOVE) <= '1';
-								set_exec(Regwrena) <= '1';	
-							ELSE	
+								set_exec(Regwrena) <= '1';
+							ELSE
+								trap_illegal <= '1';
+								trapmake <= '1';
+							END IF;
+						ELSE
+							IF opcode(7)='1' AND
+							   (opcode(5)='1' OR opcode(4 downto 3)="10") AND
+							   opcode(5 downto 3)/="100" AND opcode(5 downto 2)/="1111" THEN --ea illegal opcodes
+								source_lowbits <= '1';
 								source_areg <= '1';
 								ea_only <= '1';
 								set_exec(Regwrena) <= '1';
@@ -1940,151 +1948,194 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 									dest_areg <= '1';
 									dest_hbits <= '1';
 								END IF;
-							END IF;	
+							ELSE
+								trap_illegal <='1';
+								trapmake <='1';
+							END IF;
+						END IF;
+					ELSE								--chk
+						IF opcode(5 downto 3)/="001" AND --ea An illegal mode
+						   (opcode(5 downto 2)/="1111" OR opcode(1 downto 0)="00") THEN --ea illegal modes
+							IF opcode(7)='1' THEN
+								datatype <= "01";	--Word
+								set(trap_chk) <= '1';
+								IF (c_out(1)='0' OR OP1out(15)='1' OR OP2out(15)='1') AND exec(opcCHK)='1' THEN
+									trapmake <= '1';
+								END IF;
+							ELSIF cpu(1)='1' THEN   --chk long for 68020
+								datatype <= "10";	--Long
+								set(trap_chk) <= '1';
+								IF (c_out(2)='0' OR OP1out(31)='1' OR OP2out(31)='1') AND exec(opcCHK)='1' THEN
+									trapmake <= '1';
+								END IF;
+							ELSE
+								trap_illegal <= '1';		-- chk long for 68020
+								trapmake <= '1';
+							END IF;
+							IF opcode(7)='1' OR cpu(1)='1' THEN
+								IF (nextpass='1' OR opcode(5 downto 4)="00") AND exec(opcCHK)='0' AND micro_state=idle THEN
+									set_exec(opcCHK) <= '1';
+								END IF;
+								ea_build_now <= '1';
+								set(addsub) <= '1';
+								IF setexecOPC='1' THEN
+									dest_hbits <= '1';
+									source_lowbits <='1';
+								END IF;
+							END IF;
 						ELSE
 							trap_illegal <= '1';
 							trapmake <= '1';
-						END IF;
-					ELSE								--chk
-						IF opcode(7)='1' THEN
-							datatype <= "01";	--Word
-							set(trap_chk) <= '1';	
-							IF (c_out(1)='0' OR OP1out(15)='1' OR OP2out(15)='1') AND exec(opcCHK)='1' THEN
-								trapmake <= '1';
-							END IF;
-						ELSIF cpu(1)='1' THEN   --chk long for 68020
-							datatype <= "10";	--Long
-							set(trap_chk) <= '1';	
-							IF (c_out(2)='0' OR OP1out(31)='1' OR OP2out(31)='1') AND exec(opcCHK)='1' THEN
-								trapmake <= '1';
-							END IF;
-						ELSE
-							trap_illegal <= '1';		-- chk long for 68020
-							trapmake <= '1';
-						END IF;
-						IF opcode(7)='1' OR cpu(1)='1' THEN
-							IF (nextpass='1' OR opcode(5 downto 4)="00") AND exec(opcCHK)='0' AND micro_state=idle THEN	
-								set_exec(opcCHK) <= '1';
-							END IF;
-							ea_build_now <= '1';
-							set(addsub) <= '1';
-							IF setexecOPC='1' THEN
-								dest_hbits <= '1';
-								source_lowbits <='1';
-							END IF;	
 						END IF;
 					END IF;
 				ELSE
 					CASE opcode(11 downto 9) IS
 						WHEN "000"=>
-							IF opcode(7 downto 6)="11" THEN					--move from SR
-								IF SR_Read=0 OR (cpu(0)='0' AND SR_Read=2) OR SVmode='1'  THEN
-									ea_build_now <= '1';
-									set_exec(opcMOVESR) <= '1';
-									datatype <= "01";
-									write_back <='1';							-- im 68000 wird auch erst gelesen
-									IF cpu(0)='1' AND state="10" THEN
-										skipFetch <= '1';
+							IF (opcode(5 downto 3)/="001" AND --ea An illegal mode
+							   (opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00")) THEN --ea illegal modes
+								IF opcode(7 downto 6)="11" THEN					--move from SR
+									IF SR_Read=0 OR (cpu(0)='0' AND SR_Read=2) OR SVmode='1'  THEN
+										ea_build_now <= '1';
+										set_exec(opcMOVESR) <= '1';
+										datatype <= "01";
+										write_back <='1';							-- im 68000 wird auch erst gelesen
+										IF cpu(0)='1' AND state="10" THEN
+											skipFetch <= '1';
+										END IF;
+										IF opcode(5 downto 4)="00" THEN
+											set_exec(Regwrena) <= '1';
+										END IF;
+									ELSE
+										trap_priv <= '1';
+										trapmake <= '1';
 									END IF;
+								ELSE									--negx
+									ea_build_now <= '1';
+									set_exec(use_XZFlag) <= '1';
+									write_back <='1';
+									set_exec(opcADD) <= '1';
+									set(addsub) <= '1';
+									source_lowbits <= '1';
 									IF opcode(5 downto 4)="00" THEN
 										set_exec(Regwrena) <= '1';
 									END IF;
-								ELSE
-									trap_priv <= '1';
-									trapmake <= '1';
+									IF setexecOPC='1' THEN
+										set(OP1out_zero) <= '1';
+									END IF;
 								END IF;
-							ELSE									--negx
-								ea_build_now <= '1';
-								set_exec(use_XZFlag) <= '1';
-								write_back <='1';
-								set_exec(opcADD) <= '1';
-								set(addsub) <= '1';
-								source_lowbits <= '1';
-								IF opcode(5 downto 4)="00" THEN
-									set_exec(Regwrena) <= '1';
-								END IF;
-								IF setexecOPC='1' THEN
-									set(OP1out_zero) <= '1';
-								END IF;
+							ELSE
+								trap_illegal <= '1';
+								trapmake <= '1';
 							END IF;
 						WHEN "001"=>
-							IF opcode(7 downto 6)="11" THEN					--move from CCR 68010
-								IF SR_Read=1 OR (cpu(0)='1' AND SR_Read=2) THEN
+							IF (opcode(5 downto 3)/="001" AND --ea An illegal mode
+							   (opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00")) THEN --ea illegal modes
+								IF opcode(7 downto 6)="11" THEN					--move from CCR 68010
+									IF SR_Read=1 OR (cpu(0)='1' AND SR_Read=2) THEN
+										ea_build_now <= '1';
+										set_exec(opcMOVESR) <= '1';
+										datatype <= "01";
+										write_back <='1';							-- im 68000 wird auch erst gelesen
+--										IF state="10" THEN
+--											skipFetch <= '1';
+--										END IF;
+										IF opcode(5 downto 4)="00" THEN
+											set_exec(Regwrena) <= '1';
+										END IF;
+									ELSE
+										trap_illegal <= '1';
+										trapmake <= '1';
+									END IF;
+								ELSE											--clr
 									ea_build_now <= '1';
-									set_exec(opcMOVESR) <= '1';
-									datatype <= "01";
-									write_back <='1';							-- im 68000 wird auch erst gelesen
---									IF state="10" THEN
---										skipFetch <= '1';
---									END IF;
+									write_back <='1';
+									set_exec(opcAND) <= '1';
+								IF cpu(0)='1' AND state="10" THEN
+									skipFetch <= '1';
+								END IF;
+									IF setexecOPC='1' THEN
+										set(OP1out_zero) <= '1';
+									END IF;
 									IF opcode(5 downto 4)="00" THEN
 										set_exec(Regwrena) <= '1';
+									END IF;
+								END IF;
+							ELSE
+								trap_illegal <= '1';
+								trapmake <= '1';
+							END IF;
+						WHEN "010"=>
+							IF opcode(7 downto 6)="11" THEN					--move to CCR
+								IF opcode(5 downto 3)/="001" AND --ea An illegal mode
+								   (opcode(5 downto 2)/="1111" OR opcode(1 downto 0)="00") THEN --ea illegal modes
+									ea_build_now <= '1';
+									datatype <= "01";
+									source_lowbits <= '1';
+									IF (decodeOPC='1' AND opcode(5 downto 4)="00") OR state="10" OR direct_data='1' THEN
+										set(to_CCR) <= '1';
 									END IF;
 								ELSE
 									trap_illegal <= '1';
 									trapmake <= '1';
 								END IF;
-							ELSE											--clr
-								ea_build_now <= '1';
-								write_back <='1';
-								set_exec(opcAND) <= '1';
-							IF cpu(0)='1' AND state="10" THEN
-								skipFetch <= '1';
-							END IF;
-								IF setexecOPC='1' THEN
-									set(OP1out_zero) <= '1';
-								END IF;
-								IF opcode(5 downto 4)="00" THEN
-									set_exec(Regwrena) <= '1';
-								END IF;
-							END IF;
-						WHEN "010"=>
-							ea_build_now <= '1';
-							IF opcode(7 downto 6)="11" THEN					--move to CCR
-								datatype <= "01";
-								source_lowbits <= '1';
-								IF (decodeOPC='1' AND opcode(5 downto 4)="00") OR state="10" OR direct_data='1' THEN
-									set(to_CCR) <= '1';
-								END IF;
 							ELSE											--neg
-								write_back <='1';
-								set_exec(opcADD) <= '1';
-								set(addsub) <= '1';
-								source_lowbits <= '1';
-								IF opcode(5 downto 4)="00" THEN					
-									set_exec(Regwrena) <= '1';
-								END IF;
-								IF setexecOPC='1' THEN
-									set(OP1out_zero) <= '1';
+								IF (opcode(5 downto 3)/="001" AND --ea An illegal mode
+								   (opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00")) THEN --ea illegal modes
+									ea_build_now <= '1';
+									write_back <='1';
+									set_exec(opcADD) <= '1';
+									set(addsub) <= '1';
+									source_lowbits <= '1';
+									IF opcode(5 downto 4)="00" THEN
+										set_exec(Regwrena) <= '1';
+									END IF;
+									IF setexecOPC='1' THEN
+										set(OP1out_zero) <= '1';
+									END IF;
+								ELSE
+									trap_illegal <= '1';
+									trapmake <= '1';
 								END IF;
 							END IF;
 						WHEN "011"=>										--not, move toSR
 							IF opcode(7 downto 6)="11" THEN					--move to SR
-								IF SVmode='1' THEN
-									ea_build_now <= '1';
-									datatype <= "01";
-									source_lowbits <= '1';
-									IF (decodeOPC='1' AND opcode(5 downto 4)="00") OR state="10" OR direct_data='1' THEN
-										set(to_SR) <= '1';
-										set(to_CCR) <= '1';
-									END IF;
-									IF exec(to_SR)='1' OR (decodeOPC='1' AND opcode(5 downto 4)="00") OR state="10" OR direct_data='1' THEN
-										setstate <="01";
+								IF opcode(5 downto 3)/="001" AND --ea An illegal mode
+								   (opcode(5 downto 2)/="1111" OR opcode(1 downto 0)="00") THEN --ea illegal modes
+									IF SVmode='1' THEN
+										ea_build_now <= '1';
+										datatype <= "01";
+										source_lowbits <= '1';
+										IF (decodeOPC='1' AND opcode(5 downto 4)="00") OR state="10" OR direct_data='1' THEN
+											set(to_SR) <= '1';
+											set(to_CCR) <= '1';
+										END IF;
+										IF exec(to_SR)='1' OR (decodeOPC='1' AND opcode(5 downto 4)="00") OR state="10" OR direct_data='1' THEN
+											setstate <="01";
+										END IF;
+									ELSE
+										trap_priv <= '1';
+										trapmake <= '1';
 									END IF;
 								ELSE
-									trap_priv <= '1';
+									trap_illegal <= '1';
 									trapmake <= '1';
 								END IF;
 							ELSE											--not
-								ea_build_now <= '1';
-								write_back <='1';
-								set_exec(opcEOR) <= '1';
-								set_exec(ea_data_OP1) <= '1';
-								IF opcode(5 downto 3)="000" THEN					
-									set_exec(Regwrena) <= '1';
-								END IF;
-								IF setexecOPC='1' THEN
-									set(OP2out_one) <= '1';
+								IF opcode(5 downto 3)/="001" AND --ea An illegal mode
+								   (opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00") THEN --ea illegal modes
+									ea_build_now <= '1';
+									write_back <='1';
+									set_exec(opcEOR) <= '1';
+									set_exec(ea_data_OP1) <= '1';
+									IF opcode(5 downto 3)="000" THEN
+										set_exec(Regwrena) <= '1';
+									END IF;
+									IF setexecOPC='1' THEN
+										set(OP2out_one) <= '1';
+									END IF;
+								ELSE
+									trap_illegal <= '1';
+									trapmake <= '1';
 								END IF;
 							END IF;
 						WHEN "100"|"110"=>
@@ -2100,57 +2151,67 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 									END IF;
 								ELSE													--movem
 --								IF opcode(11 downto 7)="10001" OR opcode(11 downto 7)="11001" THEN	--MOVEM
-									ea_only <= '1';
-									set(no_Flags) <= '1';
-									IF opcode(6)='0' THEN
-										datatype <= "01";		--Word transfer
-									END IF;
-									IF (opcode(5 downto 3)="100" OR opcode(5 downto 3)="011") AND state="01" THEN	-- -(An), (An)+
-										set_exec(save_memaddr) <= '1';
-										set_exec(Regwrena) <= '1';
-									END IF;
-									IF opcode(5 downto 3)="100" THEN	-- -(An)
-										movem_presub <= '1';
-										set(subidx) <= '1';
-									END IF;
-									IF state="10" THEN
-										set(Regwrena) <= '1';	
-										set(opcMOVE) <= '1';
-									END IF;	
-									IF decodeOPC='1' THEN
-										set(get_2ndOPC) <='1';
-										IF opcode(5 downto 3)="010" OR opcode(5 downto 3)="011" OR opcode(5 downto 3)="100" THEN
-											next_micro_state <= movem1;
-										ELSE	
-											next_micro_state <= nop;
-											set(ea_build) <= '1';
-										END IF;	
-									END IF;
-									IF set(get_ea_now)='1' THEN
-										IF movem_run='1' THEN
-											set(movem_action) <= '1';
-											IF opcode(10)='0' THEN
-												setstate <="11";
-												set(write_reg) <= '1';
-											ELSE
-												setstate <="10";
-											END IF;
-											next_micro_state <= movem2;
-											set(mem_addsub) <= '1';
-										ELSE	
-											setstate <="01";
+									IF (opcode(10)='1' OR ((opcode(5)='1' OR opcode(4 downto 3)="10") AND
+									   (opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00"))) AND
+									   (opcode(10)='0' OR (opcode(5 downto 4)/="00" AND
+									   opcode(5 downto 3)/="100" AND
+									   opcode(5 downto 2)/="1111")) THEN --ea illegal modes
+										ea_only <= '1';
+										set(no_Flags) <= '1';
+										IF opcode(6)='0' THEN
+											datatype <= "01";		--Word transfer
 										END IF;
+										IF (opcode(5 downto 3)="100" OR opcode(5 downto 3)="011") AND state="01" THEN	-- -(An), (An)+
+											set_exec(save_memaddr) <= '1';
+											set_exec(Regwrena) <= '1';
+										END IF;
+										IF opcode(5 downto 3)="100" THEN	-- -(An)
+											movem_presub <= '1';
+											set(subidx) <= '1';
+										END IF;
+										IF state="10" THEN
+											set(Regwrena) <= '1';
+											set(opcMOVE) <= '1';
+										END IF;
+										IF decodeOPC='1' THEN
+											set(get_2ndOPC) <='1';
+											IF opcode(5 downto 3)="010" OR opcode(5 downto 3)="011" OR opcode(5 downto 3)="100" THEN
+												next_micro_state <= movem1;
+											ELSE
+												next_micro_state <= nop;
+												set(ea_build) <= '1';
+											END IF;
+										END IF;
+										IF set(get_ea_now)='1' THEN
+											IF movem_run='1' THEN
+												set(movem_action) <= '1';
+												IF opcode(10)='0' THEN
+													setstate <="11";
+													set(write_reg) <= '1';
+												ELSE
+													setstate <="10";
+												END IF;
+												next_micro_state <= movem2;
+												set(mem_addsub) <= '1';
+											ELSE
+												setstate <="01";
+											END IF;
+										END IF;
+									ELSE
+										trap_illegal <= '1';
+										trapmake <= '1';
 									END IF;
 								END IF;	
 							ELSE
 								IF opcode(10)='1' THEN						--MUL.L, DIV.L 68020
 	 --FPGA Multiplier for long							
-									IF MUL_Hardware=1 AND (opcode(6)='0' AND (MUL_Mode=1 OR (cpu(1)='1' AND MUL_Mode=2))) THEN
+									IF opcode(8 downto 7)="00" AND opcode(5 downto 3)/="001" AND --ea An illegal mode
+									   MUL_Hardware=1 AND (opcode(6)='0' AND (MUL_Mode=1 OR (cpu(1)='1' AND MUL_Mode=2))) THEN
 										IF decodeOPC='1' THEN
 											next_micro_state <= nop;
 											set(get_2ndOPC) <= '1';
 											set(ea_build) <= '1';
-										END IF;	
+										END IF;
 										IF (micro_state=idle AND nextpass='1') OR (opcode(5 downto 4)="00" AND exec(ea_build)='1') THEN
 											dest_2ndHbits <= '1';
 											datatype <= "10";
@@ -2159,20 +2220,21 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 											IF sndOPC(10)='1' THEN
 												setstate <="01";
 												next_micro_state <= mul_end2;
-											END IF;	
+											END IF;
 											set(Regwrena) <= '1';
 										END IF;
 										source_lowbits <='1';
 										datatype <= "10";
 
-	 --no FPGA Multplier						
-									ELSIF (opcode(6)='1' AND (DIV_Mode=1 OR (cpu(1)='1' AND DIV_Mode=2))) OR 
-									   (opcode(6)='0' AND (MUL_Mode=1 OR (cpu(1)='1' AND MUL_Mode=2))) THEN
+	 --no FPGA Multiplier
+									ELSIF opcode(8 downto 7)="00" AND opcode(5 downto 3)/="001" AND --ea An illegal mode
+									   ((opcode(6)='1' AND (DIV_Mode=1 OR (cpu(1)='1' AND DIV_Mode=2))) OR
+									   (opcode(6)='0' AND (MUL_Mode=1 OR (cpu(1)='1' AND MUL_Mode=2)))) THEN
 										IF decodeOPC='1' THEN
 											next_micro_state <= nop;
 											set(get_2ndOPC) <= '1';
 											set(ea_build) <= '1';
-										END IF;	
+										END IF;
 										IF (micro_state=idle AND nextpass='1') OR (opcode(5 downto 4)="00" AND exec(ea_build)='1')THEN
 											setstate <="01";
 											dest_2ndHbits <= '1';
@@ -2181,7 +2243,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 												next_micro_state <= div1;
 											ELSE	
 												next_micro_state <= mul1;
-												set(ld_rot_cnt) <= '1'; 
+												set(ld_rot_cnt) <= '1';
 											END IF;
 										END IF;
 										IF z_error='0' AND set_V_Flag='0' AND set(opcDIVU)='1' THEN
@@ -2207,19 +2269,26 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 											trap_illegal <= '1';
 											trapmake <= '1';
 										ELSE									--pea
-											ea_only <= '1';
-											ea_build_now <= '1';
-											IF nextpass='1' AND micro_state=idle THEN
-												set(presub) <= '1';
-												setstackaddr <='1';
-												setstate <="11";
-												next_micro_state <= nop;
+											IF (opcode(5)='1' OR opcode(4 downto 3)="10") AND
+											   opcode(5 downto 3)/="100" AND
+											   opcode(5 downto 2)/="1111" THEN --ea illegal modes
+												ea_only <= '1';
+												ea_build_now <= '1';
+												IF nextpass='1' AND micro_state=idle THEN
+													set(presub) <= '1';
+													setstackaddr <='1';
+													setstate <="11";
+													next_micro_state <= nop;
+												END IF;
+												IF set(get_ea_now)='1' THEN
+													setstate <="01";
+												END IF;
+											ELSE
+												trap_illegal <= '1';
+												trapmake <= '1';
 											END IF;
-											IF set(get_ea_now)='1' THEN
-												setstate <="01";
-											END IF;
-										END IF;	
-									ELSE	
+										END IF;
+									ELSE
 										IF opcode(5 downto 3)="001" THEN --link.l
 											datatype <= "10";
 											set_exec(opcADD) <= '1';						--for displacement
@@ -2236,19 +2305,25 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 												source_areg <= '1';
 												set(store_ea_data) <= '1';
 											END IF;
-										ELSE						--nbcd	
-											ea_build_now <= '1';
-											set_exec(use_XZFlag) <= '1';
-											write_back <='1';
-											set_exec(opcADD) <= '1';
-											set_exec(opcSBCD) <= '1';
-											set(addsub) <= '1';
-											source_lowbits <= '1';
-											IF opcode(5 downto 4)="00" THEN					
-												set_exec(Regwrena) <= '1';
-											END IF;
-											IF setexecOPC='1' THEN
-												set(OP1out_zero) <= '1';
+										ELSE						--nbcd
+											IF opcode(5 downto 3)/="001" AND --ea An illegal mode
+											   (opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00") THEN --ea illegal modes
+												ea_build_now <= '1';
+												set_exec(use_XZFlag) <= '1';
+												write_back <='1';
+												set_exec(opcADD) <= '1';
+												set_exec(opcSBCD) <= '1';
+												set(addsub) <= '1';
+												source_lowbits <= '1';
+												IF opcode(5 downto 4)="00" THEN
+													set_exec(Regwrena) <= '1';
+												END IF;
+												IF setexecOPC='1' THEN
+													set(OP1out_zero) <= '1';
+												END IF;
+											ELSE
+												trap_illegal <= '1';
+												trapmake <= '1';
 											END IF;
 										END IF;	
 									END IF;
@@ -2261,21 +2336,30 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 								trap_illegal <= '1';
 								trapmake <= '1';
 							ELSE
-								ea_build_now <= '1';
-								IF setexecOPC='1' THEN
-									source_lowbits <= '1';
-									IF opcode(3)='1' THEN			--MC68020...
-										source_areg <= '1';
+								IF (opcode(7 downto 6)/="11" OR --tas
+								   (opcode(5 downto 3)/="001" AND --ea An illegal mode
+								   (opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00"))) AND --ea illegal modes
+								   ((opcode(7 downto 6)/="00" OR (opcode(5 downto 3)/="001")) AND
+								   (opcode(5 downto 2)/="1111" OR opcode(1 downto 0)="00")) THEN
+									ea_build_now <= '1';
+									IF setexecOPC='1' THEN
+										source_lowbits <= '1';
+										IF opcode(3)='1' THEN			--MC68020...
+											source_areg <= '1';
+										END IF;
 									END IF;
-								END IF;
-								set_exec(opcMOVE) <= '1';
-								IF opcode(7 downto 6)="11" THEN		--tas
-									set_exec_tas <= '1';
-									write_back <= '1';
-									datatype <= "00";				--Byte
-									IF opcode(5 downto 4)="00" THEN					
-										set_exec(Regwrena) <= '1';
+									set_exec(opcMOVE) <= '1';
+									IF opcode(7 downto 6)="11" THEN		--tas
+										set_exec_tas <= '1';
+										write_back <= '1';
+										datatype <= "00";				--Byte
+										IF opcode(5 downto 4)="00" THEN
+											set_exec(Regwrena) <= '1';
+										END IF;
 									END IF;
+								ELSE
+									trap_illegal <= '1';
+									trapmake <= '1';
 								END IF;
 							END IF;
 ----						WHEN "110"=>
@@ -2298,32 +2382,38 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 								
 								
 							IF opcode(7)='1' THEN		--jsr, jmp
-								datatype <= "10";
-								ea_only <= '1';
-								ea_build_now <= '1';
-								IF exec(ea_to_pc)='1' THEN
-									next_micro_state <= nop;
-								END IF;
-								IF nextpass='1' AND micro_state=idle AND opcode(6)='0' THEN
-									set(presub) <= '1';
-									setstackaddr <='1';
-									setstate <="11";
-									next_micro_state <= nopnop;
-								END IF;
+								IF (opcode(5)='1' OR opcode(4 downto 3)="10") AND
+								   opcode(5 downto 3)/="100" AND opcode(5 downto 2)/="1111" THEN --ea illegal modes
+									datatype <= "10";
+									ea_only <= '1';
+									ea_build_now <= '1';
+									IF exec(ea_to_pc)='1' THEN
+										next_micro_state <= nop;
+									END IF;
+									IF nextpass='1' AND micro_state=idle AND opcode(6)='0' THEN
+										set(presub) <= '1';
+										setstackaddr <='1';
+										setstate <="11";
+										next_micro_state <= nopnop;
+									END IF;
 -- achtung buggefahr								
-								IF micro_state=ld_AnXn1 AND brief(8)='0'THEN			--JMP/JSR n(Ax,Dn)
-									skipFetch <= '1';
-								END IF;
-								IF state="00" THEN
-									writePC <= '1';
-								END IF;
-								set(hold_dwr) <= '1';
-								IF set(get_ea_now)='1' THEN					--jsr
-									IF exec(longaktion)='0' OR long_done='1' THEN					
+									IF micro_state=ld_AnXn1 AND brief(8)='0'THEN			--JMP/JSR n(Ax,Dn)
 										skipFetch <= '1';
 									END IF;
-									setstate <="01";
-									set(ea_to_pc) <= '1';
+									IF state="00" THEN
+										writePC <= '1';
+									END IF;
+									set(hold_dwr) <= '1';
+									IF set(get_ea_now)='1' THEN					--jsr
+										IF exec(longaktion)='0' OR long_done='1' THEN
+											skipFetch <= '1';
+										END IF;
+										setstate <="01";
+										set(ea_to_pc) <= '1';
+									END IF;
+								ELSE
+									trap_illegal <= '1';
+									trapmake <= '1';
 								END IF;
 							ELSE						--
 								CASE opcode(6 downto 0) IS
@@ -2331,6 +2421,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 									     "1001000"|"1001001"|"1001010"|"1001011"|"1001100"|"1001101"|"1001110"|"1001111" =>		--trap
 											trap_trap <='1';
 											trapmake <= '1';
+									
 									WHEN "1010000"|"1010001"|"1010010"|"1010011"|"1010100"|"1010101"|"1010110"|"1010111"=> 		--link word
 										datatype <= "10";
 										set_exec(opcADD) <= '1';						--for displacement
@@ -2372,6 +2463,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 											trap_priv <= '1';
 											trapmake <= '1';
 										END IF;
+									
 									WHEN "1101000"|"1101001"|"1101010"|"1101011"|"1101100"|"1101101"|"1101110"|"1101111" =>		--move USP,An
 										IF SVmode='1' THEN
 --											set(no_Flags) <= '1';
@@ -2436,7 +2528,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 											setstate <= "10";
 											set(postadd) <= '1';
 											setstackaddr <= '1';
-											set(direct_delta) <= '1';	
+											set(direct_delta) <= '1';
 											set(directPC) <= '1';
 											set_direct_data <= '1';
 											next_micro_state <= rtd1;
