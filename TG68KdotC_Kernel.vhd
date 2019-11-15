@@ -2690,11 +2690,16 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 				
 -- 0111 ----------------------------------------------------------------------------		
 			WHEN "0111" =>				--moveq
+				IF opcode(8)='0' THEN
 					datatype <= "10";		--Long
 					set_exec(Regwrena) <= '1';
 					set_exec(opcMOVEQ) <= '1';
 					set_exec(opcMOVE) <= '1';
 					dest_hbits <= '1';
+				ELSE
+					trap_illegal <= '1';
+					trapmake <= '1';
+				END IF;
 				
 ---- 1000 ----------------------------------------------------------------------------		
 			WHEN "1000" => 								--or	
