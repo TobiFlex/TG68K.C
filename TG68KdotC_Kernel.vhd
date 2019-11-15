@@ -2781,34 +2781,40 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 				END IF;
 				
 ---- 1001, 1101 -----------------------------------------------------------------------		
-			WHEN "1001"|"1101" => 						--sub, add	
-				set_exec(opcADD) <= '1';
-				ea_build_now <= '1';
-				IF opcode(14)='0' THEN
-					set(addsub) <= '1';
+			WHEN "1001"|"1101" => 						--sub, add
+				IF opcode(8 downto 3)/="000001" AND --byte src address reg direct
+				   (((opcode(8)='0' OR opcode(7 downto 6)="11") AND (opcode(5 downto 2)/="1111" OR opcode(1 downto 0)="00")) OR --illegal src ea
+				   (opcode(8)='1' AND (opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00"))) THEN --illegal dst ea
+					set_exec(opcADD) <= '1';
+					ea_build_now <= '1';
+					IF opcode(14)='0' THEN
+						set(addsub) <= '1';
+					END IF;
+					IF opcode(7 downto 6)="11" THEN	--	--adda, suba
+						IF opcode(8)='0' THEN	--adda.w, suba.w
+							datatype <= "01";	--Word
+						END IF;
+						set_exec(Regwrena) <= '1';
+						source_lowbits <='1';
+						IF opcode(3)='1' THEN
+							source_areg <= '1';
+						END IF;
+						set(no_Flags) <= '1';
+						IF setexecOPC='1' THEN
+							dest_areg <='1';
+							dest_hbits <= '1';
+						END IF;
+					ELSE
+						IF opcode(8)='1' AND opcode(5 downto 4)="00" THEN		--addx, subx
+							build_bcd <= '1';
+						ELSE							--sub, add
+							build_logical <= '1';
+						END IF;
+					END IF;
+				ELSE
+						trap_illegal <= '1';
+						trapmake <= '1';
 				END IF;
-				IF opcode(7 downto 6)="11" THEN	--	--adda, suba
-					IF opcode(8)='0' THEN	--adda.w, suba.w
-						datatype <= "01";	--Word
-					END IF;
-					set_exec(Regwrena) <= '1';
-					source_lowbits <='1';
-					IF opcode(3)='1' THEN
-						source_areg <= '1';
-					END IF;
-					set(no_Flags) <= '1';
-					IF setexecOPC='1' THEN
-						dest_areg <='1';
-						dest_hbits <= '1';
-					END IF;
-				ELSE							
-					IF opcode(8)='1' AND opcode(5 downto 4)="00" THEN		--addx, subx
-						build_bcd <= '1';
-					ELSE							--sub, add
-						build_logical <= '1';
-					END IF;
-				END IF;	
-
 --				
 ---- 1010 ----------------------------------------------------------------------------		
 			WHEN "1010" => 							--Trap 1010
