@@ -2704,11 +2704,12 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 ---- 1000 ----------------------------------------------------------------------------		
 			WHEN "1000" => 								--or	
 				IF opcode(7 downto 6)="11" THEN	--divu, divs
-					IF DIV_Mode/=3 THEN	
+					IF DIV_Mode/=3 AND
+					   opcode(5 downto 3)/="001" AND (opcode(5 downto 2)/="1111" OR opcode(1 downto 0)="00") THEN --ea illegal modes
 						IF opcode(5 downto 4)="00" THEN	--Dn, An
 							regdirectsource <= '1';
 						END IF;
-						IF (micro_state=idle AND nextpass='1') OR (opcode(5 downto 4)="00" AND decodeOPC='1') THEN	
+						IF (micro_state=idle AND nextpass='1') OR (opcode(5 downto 4)="00" AND decodeOPC='1') THEN
 							setstate <="01";
 							next_micro_state <= div1;
 						END IF;
@@ -2717,7 +2718,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 							set_exec(Regwrena) <= '1';
 						END IF;
 							source_lowbits <='1';
-						IF nextpass='1' OR (opcode(5 downto 4)="00" AND decodeOPC='1') THEN	
+						IF nextpass='1' OR (opcode(5 downto 4)="00" AND decodeOPC='1') THEN
 							dest_hbits <= '1';
 						END IF;
 						datatype <= "01";
@@ -2725,7 +2726,6 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 						trap_illegal <= '1';
 						trapmake <= '1';
 					END IF;
-			
 				ELSIF opcode(8)='1' AND opcode(5 downto 4)="00" THEN	--sbcd, pack , unpack
 					IF opcode(7 downto 6)="00" THEN	--sbcd
 						build_bcd <= '1';
@@ -2764,13 +2764,20 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 								set_direct_data <= '1';
 							END IF;
 						END IF;
-					ELSE									
+					ELSE
 						trap_illegal <= '1';
 						trapmake <= '1';
 					END IF;
 				ELSE									--or
-					set_exec(opcOR) <= '1';
-					build_logical <= '1';
+					IF opcode(7 downto 6)/="11" AND --illegal opmode
+					   ((opcode(8)='0' AND opcode(5 downto 3)/="001" AND (opcode(5 downto 2)/="1111" OR opcode(1 downto 0)="00")) OR --illegal src ea
+					   (opcode(8)='1' AND opcode(5 downto 4)/="00" AND (opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00"))) THEN --illegal dst ea
+						set_exec(opcOR) <= '1';
+						build_logical <= '1';
+					ELSE
+						trap_illegal <= '1';
+						trapmake <= '1';
+					END IF;
 				END IF;
 				
 ---- 1001, 1101 -----------------------------------------------------------------------		
