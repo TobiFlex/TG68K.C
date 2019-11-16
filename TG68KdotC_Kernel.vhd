@@ -2822,25 +2822,31 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 				trapmake <= '1';
 ---- 1011 ----------------------------------------------------------------------------		
 			WHEN "1011" => 							--eor, cmp
-				ea_build_now <= '1';
 				IF opcode(7 downto 6)="11" THEN	--CMPA
-					IF opcode(8)='0' THEN	--cmpa.w
-						datatype <= "01";	--Word
-						set_exec(opcCPMAW) <= '1';
-					END IF;
-					set_exec(opcCMP) <= '1';
-					IF setexecOPC='1' THEN
-						source_lowbits <='1';
-						IF opcode(3)='1' THEN
-							source_areg <= '1';
+					IF opcode(5 downto 2)/="1111" OR opcode(1 downto 0)="00" THEN --illegal src ea
+						ea_build_now <= '1';
+						IF opcode(8)='0' THEN	--cmpa.w
+							datatype <= "01";	--Word
+							set_exec(opcCPMAW) <= '1';
 						END IF;
-						dest_areg <='1';
-						dest_hbits <= '1';
-					END IF;	
-					set(addsub) <= '1';
-				ELSE							
+						set_exec(opcCMP) <= '1';
+						IF setexecOPC='1' THEN
+							source_lowbits <='1';
+							IF opcode(3)='1' THEN
+								source_areg <= '1';
+							END IF;
+							dest_areg <='1';
+							dest_hbits <= '1';
+						END IF;
+						set(addsub) <= '1';
+					ELSE
+						trap_illegal <= '1';
+						trapmake <= '1';
+					END IF;
+				ELSE	--cmpm, eor, cmp
 					IF opcode(8)='1' THEN
 						IF opcode(5 downto 3)="001" THEN		--cmpm
+							ea_build_now <= '1';
 							set_exec(opcCMP) <= '1';
 							IF decodeOPC='1' THEN
 								IF opcode(2 downto 0)="111" THEN
@@ -2854,15 +2860,28 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 							set_exec(ea_data_OP1) <= '1';
 							set(addsub) <= '1';
 						ELSE						--EOR
-							build_logical <= '1';
-							set_exec(opcEOR) <= '1';
+							IF opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00" THEN --illegal dst ea
+								ea_build_now <= '1';
+								build_logical <= '1';
+								set_exec(opcEOR) <= '1';
+							ELSE
+								trap_illegal <= '1';
+								trapmake <= '1';
+							END IF;
 						END IF;
 					ELSE							--CMP
-						build_logical <= '1';
-						set_exec(opcCMP) <= '1';
-						set(addsub) <= '1';
+						IF opcode(8 downto 3)/="000001" AND --byte src address reg direct
+						   (opcode(5 downto 2)/="1111" OR opcode(1 downto 0)="00") THEN --illegal src ea
+							ea_build_now <= '1';
+							build_logical <= '1';
+							set_exec(opcCMP) <= '1';
+							set(addsub) <= '1';
+						ELSE
+							trap_illegal <= '1';
+							trapmake <= '1';
+						END IF;
 					END IF;
-				END IF;	
+				END IF;
 --				
 ---- 1100 ----------------------------------------------------------------------------		
 			WHEN "1100" => 								--and, exg
