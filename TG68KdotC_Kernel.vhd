@@ -2956,18 +2956,27 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 			WHEN "1110" => 								--rotation / bitfield
 				IF opcode(7 downto 6)="11" THEN
 					IF opcode(11)='0' THEN
-						IF BarrelShifter=0 THEN
-							set_exec(opcROT) <= '1';
+					   IF (opcode(5 downto 4)/="00" AND (opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00")) THEN --ea illegal modes
+							IF BarrelShifter=0 THEN
+								set_exec(opcROT) <= '1';
+							ELSE
+								set_exec(exec_BS) <='1';
+							END IF;
+							ea_build_now <= '1';
+							datatype <= "01";
+							set_rot_bits <= opcode(10 downto 9);
+							set_exec(ea_data_OP1) <= '1';
+							write_back <= '1';
 						ELSE
-							set_exec(exec_BS) <='1';
+							trap_illegal <= '1';
+							trapmake <= '1';
 						END IF;
-						ea_build_now <= '1';
-						datatype <= "01";
-						set_rot_bits <= opcode(10 downto 9);
-						set_exec(ea_data_OP1) <= '1';
-						write_back <= '1';
 					ELSE		--bitfield
-						IF BitField=0 OR (cpu(1)='0' AND BitField=2) THEN
+						IF BitField=0 OR (cpu(1)='0' AND BitField=2) OR
+						   ((opcode(10 downto 9)="11" OR opcode(10 downto 8)="010" OR opcode(10 downto 8)="100") AND
+						   (opcode(5 downto 3)="001" OR opcode(5 downto 3)="011" OR opcode(5 downto 3)="100" OR (opcode(5 downto 3)="111" AND opcode(2 downto 1)/="00"))) OR
+						   ((opcode(10 downto 9)="00" OR opcode(10 downto 8)="011" OR opcode(10 downto 8)="101") AND
+						   (opcode(5 downto 3)="001" OR opcode(5 downto 3)="011" OR opcode(5 downto 3)="100" OR opcode(5 downto 2)="1111")) THEN
 							trap_illegal <= '1';
 							trapmake <= '1';
 						ELSE
@@ -2975,23 +2984,22 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 								next_micro_state <= nop;
 								set(get_2ndOPC) <= '1';
 								set(ea_build) <= '1';
-							END IF;	
+							END IF;
 							set_exec(opcBF) <= '1';
 --		000-bftst, 001-bfextu, 010-bfchg, 011-bfexts, 100-bfclr, 101-bfff0, 110-bfset, 111-bfins								
-							IF opcode(10)='1' OR opcode(8)='0' THEN	
+							IF opcode(10)='1' OR opcode(8)='0' THEN
 								set_exec(opcBFwb) <= '1';			--'1' for tst,chg,clr,ffo,set,ins    --'0' for extu,exts
-							END IF;	
+							END IF;
 							IF opcode(10 downto 8)="111" THEN	--BFINS
 								set_exec(ea_data_OP1) <= '1';
 							END IF;
-
 							IF opcode(10 downto 8)="010" OR opcode(10 downto 8)="100" OR opcode(10 downto 8)="110" OR opcode(10 downto 8)="111" THEN
 								write_back <= '1';
-							END IF;	
+							END IF;
 							ea_only <= '1';
 							IF opcode(10 downto 8)="001" OR opcode(10 downto 8)="011" OR opcode(10 downto 8)="101" THEN
 								set_exec(Regwrena) <= '1';
-							END IF;	
+							END IF;
 							IF opcode(4 downto 3)="00" THEN
 								IF opcode(10 downto 8)/="000" THEN
 									set_exec(Regwrena) <= '1';
@@ -3005,7 +3013,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 							END IF;
 							IF set(get_ea_now)='1' THEN
 								setstate <= "01";
-							END IF;	
+							END IF;
 							IF exec(get_ea_now)='1' THEN
 								dest_2ndHbits <= '1';
 								source_2ndLbits <= '1';
@@ -3014,23 +3022,21 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 								set(mem_addsub) <='1';
 								next_micro_state <= bf1;
 							END IF;
-							
-							IF setexecOPC='1' THEN  
+							IF setexecOPC='1' THEN
 								IF opcode(10 downto 8)="111" THEN	--BFINS
 									source_2ndHbits <= '1';
-								ELSE	
+								ELSE
 									source_lowbits <= '1';
-								END IF;	
+								END IF;
 								IF opcode(10 downto 8)="001" OR opcode(10 downto 8)="011" OR opcode(10 downto 8)="101" THEN	--BFEXT, BFFFO
 									dest_2ndHbits <= '1';
-								END IF;	
+								END IF;
 							END IF;
 						END IF;
 					END IF;
-				ELSE	
+				ELSE
 					data_is_source <= '1';
 					IF BarrelShifter=0 OR (cpu(1)='0' AND BarrelShifter=2) THEN
-
 						set_exec(opcROT) <= '1';
 						set_rot_bits <= opcode(4 downto 3);
 						set_exec(Regwrena) <= '1';
@@ -3047,13 +3053,13 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 									set_rot_cnt(3) <='0';
 								END IF;
 							END IF;
-						END IF;	
+						END IF;
 					ELSE
 						set_exec(exec_BS) <='1';
 						set_rot_bits <= opcode(4 downto 3);
 						set_exec(Regwrena) <= '1';
 					END IF;
-				END IF;	
+				END IF;
 --							
 ----      ----------------------------------------------------------------------------		
 			WHEN OTHERS =>	
