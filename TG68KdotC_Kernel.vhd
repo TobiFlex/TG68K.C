@@ -2886,16 +2886,17 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 ---- 1100 ----------------------------------------------------------------------------		
 			WHEN "1100" => 								--and, exg
 				IF opcode(7 downto 6)="11" THEN	--mulu, muls
-					IF MUL_Mode/=3 THEN	
+					IF MUL_Mode/=3 AND
+					   opcode(5 downto 3)/="001" AND (opcode(5 downto 2)/="1111" OR opcode(1 downto 0)="00") THEN --ea illegal modes
 						IF opcode(5 downto 4)="00" THEN	--Dn, An
 							regdirectsource <= '1';
 						END IF;
 						IF (micro_state=idle AND nextpass='1') OR (opcode(5 downto 4)="00" AND decodeOPC='1') THEN	
 							IF MUL_Hardware=0 THEN
 								setstate <="01";
-								set(ld_rot_cnt) <= '1'; 
+								set(ld_rot_cnt) <= '1';
 								next_micro_state <= mul1;
-							ELSE	
+							ELSE
 								set_exec(write_lowlong) <= '1';
 								set_exec(opcMULU) <= '1';
 							END IF;
@@ -2907,39 +2908,49 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 							dest_hbits <= '1';
 						END IF;
 						datatype <= "01";
-						IF setexecOPC='1' THEN  
+						IF setexecOPC='1' THEN
 							datatype <= "10";
 						END IF;
-
 					ELSE
 						trap_illegal <= '1';
 						trapmake <= '1';
 					END IF;
-			
 				ELSIF opcode(8)='1' AND opcode(5 downto 4)="00" THEN	--exg, abcd
 					IF opcode(7 downto 6)="00" THEN	--abcd
 						build_bcd <= '1';
 						set_exec(opcADD) <= '1';
 						set_exec(opcABCD) <= '1';
 					ELSE									--exg
-						datatype <= "10";
-						set(Regwrena) <= '1';
-						set(exg) <= '1';
-						set(alu_move) <= '1';
-						IF opcode(6)='1' AND opcode(3)='1' THEN
-							dest_areg <= '1';
-							source_areg <= '1';
-						END IF;	
-						IF decodeOPC='1' THEN
-							setstate <= "01";
+						IF opcode(7 downto 4)="0100" OR opcode(7 downto 3)="10001" THEN
+							datatype <= "10";
+							set(Regwrena) <= '1';
+							set(exg) <= '1';
+							set(alu_move) <= '1';
+							IF opcode(6)='1' AND opcode(3)='1' THEN
+								dest_areg <= '1';
+								source_areg <= '1';
+							END IF;
+							IF decodeOPC='1' THEN
+								setstate <= "01";
+							ELSE
+								dest_hbits <= '1';
+							END IF;
 						ELSE
-							dest_hbits <= '1';
+							trap_illegal <= '1';
+							trapmake <= '1';
 						END IF;
 					END IF;
 				ELSE									--and
-					set_exec(opcAND) <= '1';
-					build_logical <= '1';
-				END IF;	
+					IF opcode(7 downto 6)/="11" AND --illegal opmode
+					   ((opcode(8)='0' AND opcode(5 downto 3)/="001" AND (opcode(5 downto 2)/="1111" OR opcode(1 downto 0)="00")) OR --illegal src ea
+					   (opcode(8)='1' AND opcode(5 downto 4)/="00" AND (opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00"))) THEN --illegal dst ea
+						set_exec(opcAND) <= '1';
+						build_logical <= '1';
+					ELSE
+						trap_illegal <= '1';
+						trapmake <= '1';
+					END IF;
+				END IF;
 --				
 ---- 1110 ----------------------------------------------------------------------------		
 			WHEN "1110" => 								--rotation / bitfield
