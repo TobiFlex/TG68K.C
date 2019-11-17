@@ -21,7 +21,8 @@
 ------------------------------------------------------------------------------
 ------------------------------------------------------------------------------
 
--- 10.11.2019 TG inset TRAPcc
+-- 17.11.2019 TG insert CAS and CAS2
+-- 10.11.2019 TG insert TRAPcc
 -- 08.11.2019 TG bugfix movem in 68020 mode
 -- 06.11.2019 TG bugfix CHK
 -- 06.11.2019 TG bugfix flags and stackframe DIVU
@@ -200,8 +201,6 @@ architecture logic of TG68KdotC_Kernel is
 	signal TG68_PC_word		: bit;
 	signal getbrief			: bit;
 	signal brief				: std_logic_vector(15 downto 0);
-	signal dest_areg			: std_logic;
-	signal source_areg		: std_logic;
 	signal data_is_source	: bit;
 	signal store_in_tmp		: bit;
 	signal write_back			: bit;
@@ -213,6 +212,7 @@ architecture logic of TG68KdotC_Kernel is
 	signal setopcode			: bit;
 	signal decodeOPC			: bit;
 	signal execOPC				: bit;
+	signal execOPC_ALU		: bit;
 	signal setexecOPC			: bit;
 	signal endOPC				: bit;
 	signal setendOPC			: bit;
@@ -225,10 +225,19 @@ architecture logic of TG68KdotC_Kernel is
 
 	signal exe_condition		: std_logic;
 	signal ea_only				: bit;
+	signal source_areg		: std_logic;
 	signal source_lowbits	: bit;
+	signal source_LDRLbits 	: bit;
+	signal source_LDRMbits 	: bit;
 	signal source_2ndHbits	: bit;
+	signal source_2ndMbits	: bit;
 	signal source_2ndLbits	: bit;
+	signal dest_areg			: std_logic;
+	signal dest_LDRareg		: std_logic;
+	signal dest_LDRHbits		: bit;
+	signal dest_LDRLbits		: bit;
 	signal dest_2ndHbits		: bit;
+	signal dest_2ndLbits		: bit;
 	signal dest_hbits			: bit;
 	signal rot_bits			: std_logic_vector(1 downto 0);
 	signal set_rot_bits		: std_logic_vector(1 downto 0);
@@ -351,7 +360,7 @@ ALU: TG68K_ALU
 		Reset => Reset,						--: in std_logic;
 		CPU => CPU,								--: in std_logic_vector(1 downto 0):="00";  -- 00->68000  01->68010  11->68020(only some parts - yet)
 		clkena_lw => clkena_lw,				--: in std_logic:='1';
-		execOPC => execOPC,					--: in bit;
+		execOPC => execOPC_ALU,				--: in bit;
 		decodeOPC => decodeOPC,				--: in bit;
 		exe_condition => exe_condition,	--: in std_logic;
 		exec_tas => exec_tas,				--: in std_logic;
@@ -390,7 +399,7 @@ ALU: TG68K_ALU
 	);
 
 	long_start_alu <= to_bit(NOT memmaskmux(3));
-
+	execOPC_ALU <= execOPC OR exec(alu_exec);
 	process (memmaskmux)
 	begin
 		non_aligned <= '0';
@@ -582,7 +591,7 @@ PROCESS (OP1in, reg_QA, Regwrena_now, Bwrena, Lwrena, exe_datatype, WR_AReg, mov
 -----------------------------------------------------------------------------
 -- set dest regaddr
 -----------------------------------------------------------------------------
-PROCESS (opcode, rf_source_addrd, brief, setstackaddr, dest_hbits, dest_areg, data_is_source, sndOPC, exec, set, dest_2ndHbits)
+PROCESS (opcode, rf_source_addrd, brief, setstackaddr, dest_hbits, dest_areg, dest_LDRareg, data_is_source, sndOPC, exec, set, dest_2ndHbits, dest_2ndLbits, dest_LDRHbits, dest_LDRLbits, last_data_read)
 	BEGIN
 		IF exec(movem_action) ='1' THEN
 			rf_dest_addr <= rf_source_addrd;
@@ -595,8 +604,12 @@ PROCESS (opcode, rf_source_addrd, brief, setstackaddr, dest_hbits, dest_areg, da
 --				rf_dest_addr <= sndOPC(9 downto 6);
 --			END IF;
 		ELSIF dest_2ndHbits='1' THEN
-			rf_dest_addr <= '0'&sndOPC(14 downto 12);
-		ELSIF set(write_reminder)='1' THEN
+			rf_dest_addr <= dest_LDRareg&sndOPC(14 downto 12);
+		ELSIF dest_LDRHbits='1' THEN
+			rf_dest_addr <= last_data_read(15 downto 12);
+		ELSIF dest_LDRLbits='1' THEN
+			rf_dest_addr <= '0'&last_data_read(2 downto 0);
+		ELSIF dest_2ndLbits='1' THEN
 			rf_dest_addr <= '0'&sndOPC(2 downto 0);
 		ELSIF setstackaddr='1' THEN	
 			rf_dest_addr <= "1111";
@@ -614,7 +627,7 @@ PROCESS (opcode, rf_source_addrd, brief, setstackaddr, dest_hbits, dest_areg, da
 -----------------------------------------------------------------------------
 -- set source regaddr
 -----------------------------------------------------------------------------
-PROCESS (opcode, movem_presub, movem_regaddr, source_lowbits, source_areg, sndOPC, exec, set, source_2ndLbits, source_2ndHbits)
+PROCESS (opcode, movem_presub, movem_regaddr, source_lowbits, source_areg, sndOPC, exec, set, source_2ndLbits, source_2ndHbits, 	source_LDRLbits, source_LDRMbits, last_data_read, source_2ndMbits)
 	BEGIN
 		IF exec(movem_action)='1' OR set(movem_action) ='1' THEN
 			IF movem_presub='1' THEN
@@ -626,6 +639,12 @@ PROCESS (opcode, movem_presub, movem_regaddr, source_lowbits, source_areg, sndOP
 			rf_source_addr <= '0'&sndOPC(2 downto 0);
 		ELSIF source_2ndHbits='1' THEN
 			rf_source_addr <= '0'&sndOPC(14 downto 12);
+		ELSIF source_2ndMbits='1' THEN
+			rf_source_addr <= '0'&sndOPC(8 downto 6);
+		ELSIF source_LDRLbits='1' THEN
+			rf_source_addr <= '0'&last_data_read(2 downto 0);
+		ELSIF source_LDRMbits='1' THEN
+			rf_source_addr <= '0'&last_data_read(8 downto 6);
 		ELSIF source_lowbits='1' THEN
 			rf_source_addr <= source_areg&opcode(2 downto 0);
 		ELSIF exec(linksp)='1' THEN
@@ -693,22 +712,12 @@ PROCESS (clk)
      	IF rising_edge(clk) THEN
 			IF Reset = '1' THEN
 				store_in_tmp <='0';
-				exec_write_back <= '0';
 				direct_data <= '0';
 				use_direct_data <= '0';
 				Z_error <= '0';
 			ELSIF clkena_lw='1' THEN
 				useStackframe2<='0';
 				direct_data <= '0';
-				IF state="11" THEN
-					exec_write_back <= '0';
---				ELSIF setstate="10" AND write_back='1' THEN
---				ELSIF setstate = "10" AND write_back = '1' AND next_micro_state = idle THEN  	--this shut be a fix for pinball
---																														--but it destory pack -(ax),-(ay) and unpack
-				ELSIF setstate = "10" AND write_back = '1' AND (opcode(15 downto 12)/="0100" OR next_micro_state = idle) THEN  	--this shut be a fix for pinball --thanks slingshot
-					exec_write_back <= '1';
-				END IF;	
-
 				IF exec(hold_OP2)='1' THEN
 					use_direct_data <= '1';
 				END IF;
@@ -902,7 +911,7 @@ PROCESS (clk, setdisp, memaddr_a, briefdata, memaddr_delta, setdispbyte, datatyp
 				use_base <= '0'; 
 				IF memmaskmux(3)='0' OR exec(mem_addsub)='1' THEN
 					memaddr_delta <= addsub_q;	
-				ELSIF state="01" AND exec_write_back='1' THEN			
+				ELSIF set(restore_ADDR)='1' THEN			
 					memaddr_delta <= tmp_TG68_PC;
 				ELSIF exec(direct_delta)='1' THEN
 					memaddr_delta <= data_read;
@@ -1015,6 +1024,7 @@ PROCESS (clk, IPL, setstate, state, exec_write_back, set_direct_data, next_micro
 				endOPC <= '0';
 				TG68_PC_word <= '0';
 				execOPC <= '0';
+--				execOPC_ALU <= '0';
 				stop <= '0';
 				rot_cnt <="000001";
 --				byte <= '0';
@@ -1026,6 +1036,7 @@ PROCESS (clk, IPL, setstate, state, exec_write_back, set_direct_data, next_micro
 				Suppress_Base <= '0'; 
 				make_berr <= '0';
 				memmask <= "111111";
+				exec_write_back <= '0';
 			ELSE
 --				IPL_nr <= NOT IPL;
 				IF clkena_in='1' THEN
@@ -1047,6 +1058,11 @@ PROCESS (clk, IPL, setstate, state, exec_write_back, set_direct_data, next_micro
 					decodeOPC <= setopcode;
 					endOPC <= setendOPC;
 					execOPC <= setexecOPC;
+--					IF setexecOPC='1' OR set(alu_exec)='1' THEN
+--						execOPC_ALU <= '1';
+--					ELSE
+--						execOPC_ALU <= '0';
+--					END IF;
 					
 					exe_datatype <= set_datatype;
 					exe_opcode <= opcode;
@@ -1101,6 +1117,12 @@ PROCESS (clk, IPL, setstate, state, exec_write_back, set_direct_data, next_micro
 					FC(0) <= setstate(1) AND (NOT PCbase OR setstate(0));
 					IF interrupt='1' THEN
 						FC(1 downto 0) <= "11";
+					END IF;	
+					
+					IF state="11" THEN
+						exec_write_back <= '0';
+					ELSIF setstate="10" AND write_back='1' THEN
+						exec_write_back <= '1';
 					END IF;	
 					IF (state="10" AND write_back='1' AND setstate/="10") OR set_rot_cnt/="000001" OR (stop='1' AND interrupt='0') OR set_exec(opcCHK)='1' THEN
 						state <= "01";
@@ -1206,10 +1228,14 @@ PROCESS (clk, IPL, setstate, state, exec_write_back, set_direct_data, next_micro
 			END IF;	
 			IF clkena_lw='1' THEN
 				exec <= set;
+				exec(alu_move) <= set(opcMOVE) OR set(alu_move);
+				exec(alu_setFlags) <= set(opcADD) OR set(alu_setFlags);
 				exec_tas <= '0';
 				exec(subidx) <= set(presub) or set(subidx);
 				IF setexecOPC='1' THEN
 					exec <= set_exec OR set;
+					exec(alu_move) <= set_exec(opcMOVE) OR set(opcMOVE) OR set(alu_move);
+					exec(alu_setFlags) <= set_exec(opcADD) OR set(opcADD) OR set(alu_setFlags);
 					exec_tas <= set_exec_tas;
 				END IF;	
 				exec(get_2ndOPC) <= set(get_2ndOPC) OR setopcode;
@@ -1370,6 +1396,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 		setdisp <= '0';
 		setdispbyte <= '0';
 		getbrief <= '0';
+		dest_LDRareg <= '0';
 		dest_areg <= '0';
 		source_areg <= '0';
 		data_is_source <= '0';
@@ -1382,9 +1409,15 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 		set_rot_cnt <= "000001";
 		dest_hbits <= '0';
 		source_lowbits <= '0';
+		source_LDRLbits <= '0';
+		source_LDRMbits <= '0';
 		source_2ndHbits <= '0';
+		source_2ndMbits <= '0';
 		source_2ndLbits <= '0';
+		dest_LDRHbits <= '0';
+		dest_LDRLbits <= '0';
 		dest_2ndHbits <= '0';
+		dest_2ndLbits <= '0';
 		ea_only <= '0';
 		set_direct_data <= '0';
 		set_exec_tas <= '0';
@@ -1431,6 +1464,10 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 			WHEN "01" => datatype <= "01";		--Word
 			WHEN OTHERS => datatype <= "10";	--Long
 		END CASE;
+
+		IF execOPC='1' AND exec_write_back='1' THEN
+			set(restore_ADDR) <= '1';
+		END IF;
 		
 		IF interrupt='1' AND trap_berr='1' THEN
 			next_micro_state <= trap0;
@@ -1609,9 +1646,42 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 					ELSE	
 						ea_build_now <= '1';
 					END IF;
+				ELSIF	opcode(8 downto 6)="011" THEN			--CAS/CAS2
+					IF cpu(1)='1' THEN
+						CASE opcode(10 downto 9) IS
+							WHEN "01" => datatype <= "00";		--Byte
+							WHEN "10" => datatype <= "01";		--Word
+							WHEN OTHERS => datatype <= "10";	--Long
+						END CASE;
+						IF opcode(10)='1' AND opcode(5 downto 0)="111100" THEN --CAS2
+--							trap_illegal <= '1';
+--							trapmake <= '1';
+							IF decodeOPC='1' THEN
+								set(get_2ndOPC) <= '1';
+								next_micro_state <= cas21;
+							END IF;	
+						ELSE	
+							IF decodeOPC='1' THEN
+								next_micro_state <= nop;
+								set(get_2ndOPC) <= '1';
+								set(ea_build) <= '1';
+							END IF;	
+							IF micro_state=idle AND nextpass='1' THEN
+								source_2ndLbits <= '1';
+								set(ea_data_OP1) <= '1';
+								set(addsub) <= '1';
+								set(alu_exec) <= '1';
+								set(alu_setFlags) <= '1';
+								setstate <= "01";
+								next_micro_state <= cas1;
+							END IF;
+						END IF;
+					ELSE	
+						trap_illegal <= '1';
+						trapmake <= '1';
+					END IF;
 				ELSIF opcode(11 downto 9)="111" THEN		--MOVES not in 68000
 					trap_illegal <= '1';
---					trap_addr_error <= '1';
 					trapmake <= '1';
 				ELSE								--andi, ...xxxi	
 					IF opcode(11 downto 9)="000" THEN	--ORI
@@ -2628,6 +2698,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 						datatype <= "10";
 						set(Regwrena) <= '1';
 						set(exg) <= '1';
+						set(alu_move) <= '1';
 						IF opcode(6)='1' AND opcode(3)='1' THEN
 							dest_areg <= '1';
 							source_areg <= '1';
@@ -3046,7 +3117,86 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 							TG68_PC_brw <= '1';	
 						END IF;	
 					END IF;
-				
+					
+				WHEN cas1 =>
+						setstate <="01";
+						next_micro_state <= cas2;
+				WHEN cas2 =>
+					source_2ndMbits <= '1';
+					IF Flags(2)='1'THEN
+						setstate<="11";
+						set(write_reg) <= '1';
+						set(restore_ADDR) <= '1';
+						next_micro_state <= nop;
+					ELSE
+						set(Regwrena) <= '1';
+						set(ea_data_OP2) <='1';
+						dest_2ndLbits <= '1';
+						set(alu_move) <= '1';
+					END IF;
+					
+				WHEN cas21 =>
+					dest_2ndHbits <= '1';
+					dest_LDRareg <= sndOPC(15);
+					set(get_ea_now) <='1';
+					next_micro_state <= cas22;
+				WHEN cas22 =>
+					setstate <= "01";
+					source_2ndLbits <= '1';
+					set(ea_data_OP1) <= '1';
+					set(addsub) <= '1';
+					set(alu_exec) <= '1';
+					set(alu_setFlags) <= '1';
+					next_micro_state <= cas23;
+				WHEN cas23 =>
+					dest_LDRHbits <= '1';
+					set(get_ea_now) <='1';
+					next_micro_state <= cas24;
+				WHEN cas24 =>
+					IF Flags(2)='1'THEN
+						set(alu_setFlags) <= '1';
+					END IF;
+					setstate <="01";
+					set(hold_dwr) <= '1';
+					source_LDRLbits <= '1';
+					set(ea_data_OP1) <= '1';
+					set(addsub) <= '1';
+					set(alu_exec) <= '1';
+					next_micro_state <= cas25;
+				WHEN cas25 =>
+					setstate <= "01";
+					set(hold_dwr) <= '1';
+					next_micro_state <= cas26;
+				WHEN cas26 =>
+					IF Flags(2)='1'THEN -- write Update 1 to Destination 1
+						source_2ndMbits <= '1';
+						set(write_reg) <= '1';
+						dest_2ndHbits <= '1';
+						dest_LDRareg <= sndOPC(15);
+						setstate <= "11";
+						set(get_ea_now) <='1';
+						next_micro_state <= cas27;
+					ELSE		   			-- write Destination 2 to Compare 2 first
+						set(hold_dwr) <= '1';
+						set(hold_OP2) <='1';
+						dest_LDRLbits <= '1';
+						set(alu_move) <= '1';
+						set(Regwrena) <= '1';
+						set(ea_data_OP2) <='1';
+						next_micro_state <= cas28;
+					END IF;
+				WHEN cas27 =>				-- write Update 2 to Destination 2
+					source_LDRMbits <= '1';
+					set(write_reg) <= '1';
+					dest_LDRHbits <= '1';
+					setstate <= "11";
+					set(get_ea_now) <='1';
+					next_micro_state <= nopnop;
+				WHEN cas28 =>				-- write Destination 1 to Compare 1 second
+					dest_2ndLbits <= '1';
+					set(alu_move) <= '1';
+					set(Regwrena) <= '1';
+					
 				WHEN movem1 =>		--movem
 					IF last_data_read(15 downto 0)/=X"0000" THEN
 						setstate <="01";
@@ -3379,6 +3529,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 					END IF;
 					datatype <= "10";
 				WHEN mul_end2	=>		-- divu
+					dest_2ndLbits <= '1';
 					set(write_reminder) <= '1';
 					set(Regwrena) <= '1';
 					set(opcMULU) <= '1';
@@ -3411,6 +3562,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 					END IF;
 				WHEN div_end1	=>		-- divu
 					IF opcode(15)='0' AND (DIV_Mode=1 OR DIV_Mode=2) THEN
+						dest_2ndLbits <= '1';
 						set(write_reminder) <= '1';
 						next_micro_state <= div_end2;
 						setstate <="01";

@@ -254,7 +254,8 @@ PROCESS (OP2out, reg_QB, opcode, OP1out, OP1in, exe_datatype, addsub_q, execOPC,
 			OP1in(7 downto 0) <= (others=>exe_condition); 
 		ELSIF exec(opcEOR)='1' THEN
 			OP1in <= OP2out XOR OP1out;
-		ELSIF exec(opcMOVE)='1' OR exec(exg)='1' THEN
+--		ELSIF exec(alu_move)='1' OR exec(exg)='1' THEN
+		ELSIF exec(alu_move)='1' THEN
 --			OP1in <= OP2out(31 downto 8)&(OP2out(7)OR exec_tas)&OP2out(6 downto 0);
 			OP1in <= OP2out;
 		ELSIF exec(opcROT)='1' THEN
@@ -981,7 +982,8 @@ PROCESS (clk, Reset, exe_opcode, exe_datatype, Flags, last_data_read, OP2out, fl
 						Flags(4) <= BS_X; 	
 					END IF;
 					
-					IF (exec(opcADD) OR exec(opcCMP))='1' THEN
+--					IF (exec(opcADD) OR exec(opcCMP))='1' OR exec(alu_setFlags)='1' THEN
+					IF (exec(opcCMP) OR exec(alu_setFlags))='1' THEN
 						Flags(3 downto 0) <= set_flags;
 					ELSIF exec(opcDIVU)='1' AND DIV_Mode/=3 THEN
 						IF V_Flag='1' THEN	
