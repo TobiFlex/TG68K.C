@@ -21,6 +21,7 @@
 ------------------------------------------------------------------------------
 ------------------------------------------------------------------------------
 
+-- 18.11.2019 TG insert CMP2 and CHK2.l
 -- 17.11.2019 TG insert CAS and CAS2
 -- 10.11.2019 TG insert TRAPcc
 -- 08.11.2019 TG bugfix movem in 68020 mode
@@ -679,10 +680,6 @@ PROCESS (OP2out, reg_QB, exe_opcode, exe_datatype, execOPC, exec, use_direct_dat
 		OP2out(31 downto 16) <= (OTHERS => OP2out(15));
 		IF exec(OP2out_one)='1' THEN
 			OP2out(15 downto 0) <= "1111111111111111";
-		ELSIF exec(opcEXT)='1' THEN
-			IF exe_opcode(6)='0' OR exe_opcode(8)='1' THEN	--ext.w
-				OP2out(15 downto 8) <= (OTHERS => OP2out(7));		
-			END IF;	
 		ELSIF use_direct_data='1' OR (exec(exg)='1' AND execOPC='1') OR exec(get_bfoffset)='1' THEN	
 			OP2out <= data_write_tmp;	
 		ELSIF (exec(ea_data_OP1)='0' AND store_in_tmp='1') OR exec(ea_data_OP2)='1' THEN
@@ -698,8 +695,11 @@ PROCESS (OP2out, reg_QB, exe_opcode, exe_datatype, execOPC, exec, use_direct_dat
 				OP2out(3) <='0';
 			END IF;
 			OP2out(15 downto 4) <= (OTHERS => '0');
-		ELSIF exe_datatype="10" THEN 
+		ELSIF exe_datatype="10" AND exec(opcEXT)='0'  THEN 
 			OP2out(31 downto 16) <= reg_QB(31 downto 16);
+		END IF;
+		IF exec(opcEXTB)='1' THEN
+			OP2out(31 downto 8) <= (OTHERS => OP2out(7));		
 		END IF;
 	END PROCESS;
 	
@@ -1477,7 +1477,8 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 			setstate <= "01";
 		END IF;	
 		IF trapmake='1' AND trapd='0' THEN
-			IF use_VBR_Stackframe='1' AND (trap_trapv='1' OR set_Z_error='1' OR exec(opcCHK)='1') THEN
+--			IF use_VBR_Stackframe='1' AND (trap_trapv='1' OR set_Z_error='1' OR exec(opcCHK)='1') THEN
+			IF use_VBR_Stackframe='1' AND (trap_trapv='1' OR set_Z_error='1' OR exec(trap_chk)='1') THEN
 				next_micro_state <= trap00;
 			else
 				next_micro_state <= trap0;
@@ -1646,34 +1647,52 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 					ELSE	
 						ea_build_now <= '1';
 					END IF;
-				ELSIF	opcode(8 downto 6)="011" THEN			--CAS/CAS2
+				ELSIF	opcode(8 downto 6)="011" THEN			--CAS/CAS2/CMP2/CHK2
 					IF cpu(1)='1' THEN
-						CASE opcode(10 downto 9) IS
-							WHEN "01" => datatype <= "00";		--Byte
-							WHEN "10" => datatype <= "01";		--Word
-							WHEN OTHERS => datatype <= "10";	--Long
-						END CASE;
-						IF opcode(10)='1' AND opcode(5 downto 0)="111100" THEN --CAS2
---							trap_illegal <= '1';
---							trapmake <= '1';
-							IF decodeOPC='1' THEN
-								set(get_2ndOPC) <= '1';
-								next_micro_state <= cas21;
-							END IF;	
-						ELSE	
+						IF opcode(11)='1' THEN					--CAS/CAS2
+							CASE opcode(10 downto 9) IS
+								WHEN "01" => datatype <= "00";		--Byte
+								WHEN "10" => datatype <= "01";		--Word
+								WHEN OTHERS => datatype <= "10";	--Long
+							END CASE;
+							IF opcode(10)='1' AND opcode(5 downto 0)="111100" THEN --CAS2
+	--							trap_illegal <= '1';
+	--							trapmake <= '1';
+								IF decodeOPC='1' THEN
+									set(get_2ndOPC) <= '1';
+									next_micro_state <= cas21;
+								END IF;	
+							ELSE											--CAS
+								IF decodeOPC='1' THEN
+									next_micro_state <= nop;
+									set(get_2ndOPC) <= '1';
+									set(ea_build) <= '1';
+								END IF;	
+								IF micro_state=idle AND nextpass='1' THEN
+									source_2ndLbits <= '1';
+									set(ea_data_OP1) <= '1';
+									set(addsub) <= '1';
+									set(alu_exec) <= '1';
+									set(alu_setFlags) <= '1';
+									setstate <= "01";
+									next_micro_state <= cas1;
+								END IF;
+							END IF;
+						ELSE				--CMP2/CHK2
+							set(trap_chk) <= '1';	
+							datatype <= opcode(10 downto 9);
 							IF decodeOPC='1' THEN
 								next_micro_state <= nop;
 								set(get_2ndOPC) <= '1';
 								set(ea_build) <= '1';
 							END IF;	
+							IF set(get_ea_now)='1' THEN
+								set(mem_addsub) <= '1';
+								set(OP1addr) <= '1';		
+							END IF;
 							IF micro_state=idle AND nextpass='1' THEN
-								source_2ndLbits <= '1';
-								set(ea_data_OP1) <= '1';
-								set(addsub) <= '1';
-								set(alu_exec) <= '1';
-								set(alu_setFlags) <= '1';
-								setstate <= "01";
-								next_micro_state <= cas1;
+								setstate <= "10";
+								next_micro_state <= chk21;
 							END IF;
 						END IF;
 					ELSE	
@@ -1821,14 +1840,11 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 					IF opcode(6)='1' THEN		--lea
 						IF opcode(7)='1' THEN		
 							source_lowbits <= '1';
---							IF opcode(5 downto 3)="000" AND opcode(10)='0' THEN		--ext
 							IF opcode(5 downto 4)="00" THEN		--extb.l
 								set_exec(opcEXT) <= '1';
+								set_exec(opcEXTB) <= '1';
 								set_exec(opcMOVE) <= '1';
 								set_exec(Regwrena) <= '1';	
---								IF opcode(6)='0' THEN
---									datatype <= "01";		--WORD
---								END IF;
 							ELSE	
 								source_areg <= '1';
 								ea_only <= '1';
@@ -2005,6 +2021,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 									set_exec(Regwrena) <= '1';	
 									IF opcode(6)='0' THEN
 										datatype <= "01";		--WORD
+										set_exec(opcEXTB) <= '1';
 									END IF;
 								ELSE													--movem
 --								IF opcode(11 downto 7)="10001" OR opcode(11 downto 7)="11001" THEN	--MOVEM
@@ -3116,6 +3133,45 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 							next_micro_state <= nop;
 							TG68_PC_brw <= '1';	
 						END IF;	
+					END IF;
+
+				WHEN chk21 =>
+					dest_2ndHbits <= '1';
+					IF sndOPC(15)='1' THEN
+						set_datatype <="10";	--long
+						dest_LDRareg <= '1';
+						IF opcode(10 downto 9)="00" THEN
+							set(opcEXTB) <= '1';
+						END IF;
+					END IF;
+					set(hold_dwr) <= '1';
+					set(hold_OP2) <='1';
+					set(addsub) <= '1';
+					set(alu_exec) <= '1';
+					set(alu_setFlags) <= '1';
+					setstate <="01";
+					next_micro_state <= chk22;
+				WHEN chk22 =>
+					dest_2ndHbits <= '1';
+					IF sndOPC(15)='1' THEN
+						set_datatype <="10";	--long
+						dest_LDRareg <= '1';
+					END IF;
+					set(addsub) <= '1';
+					set(alu_exec) <= '1';
+					set(opcCHK2) <= '1';
+					set(opcEXTB) <= exec(opcEXTB);
+					IF sndOPC(11)='1' THEN
+						setstate <="01";
+						next_micro_state <= chk23;
+					END IF;
+				WHEN chk23 =>
+						setstate <="01";
+						next_micro_state <= chk24;
+				WHEN chk24 =>
+					IF Flags(0)='1'THEN
+--						set(trap_chk) <= '1';	
+						trapmake <= '1';
 					END IF;
 					
 				WHEN cas1 =>

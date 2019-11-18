@@ -1023,6 +1023,10 @@ PROCESS (clk, Reset, exe_opcode, exe_datatype, Flags, last_data_read, OP2out, fl
 						Flags(1) <= BS_V;
 					ELSIF exec(opcBITS)='1' THEN
 						Flags(2) <= NOT one_bit_in;	
+					ELSIF exec(opcCHK2)='1' THEN
+						Flags(0) <= (NOT Flags(0) AND NOT Flags(2)) OR set_flags(0);
+						Flags(3) <= NOT flags(3) OR set_flags(3);
+						Flags(2) <= Flags(2) OR set_flags(2);
 					ELSIF exec(opcCHK)='1' THEN
 						IF exe_datatype="01" THEN 						--Word
 							Flags(3) <= OP1out(15);
