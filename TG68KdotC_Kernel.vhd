@@ -2590,8 +2590,8 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 					END CASE;
 				END IF;	
 --					
----- 0101 ----------------------------------------------------------------------------		
-			WHEN "0101" => 								--subq, addq	
+---- 0101 ----------------------------------------------------------------------------
+			WHEN "0101" => 								--subq, addq
 					IF opcode(7 downto 6)="11" THEN --dbcc
 						IF opcode(5 downto 3)="001" THEN --dbcc
 							IF decodeOPC='1' THEN
@@ -2605,13 +2605,13 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 									IF decodeOPC='1' THEN
 										IF opcode(0)='1' THEN			--long
 											set(longaktion) <= '1';
-										END IF;	
+										END IF;
 										next_micro_state <= nop;
 									END IF;
-								ELSE 	
+								ELSE
 									IF decodeOPC='1' THEN
 										setstate <= "01";
-									END IF;	
+									END IF;
 								END IF;
 								trap_trapcc<='1';
 								IF exe_condition='1' AND decodeOPC='0' THEN
@@ -2630,26 +2630,32 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 							IF cpu(0)='1' AND state="10" THEN
 								skipFetch <= '1';
 							END IF;
-							IF opcode(5 downto 4)="00" THEN					
+							IF opcode(5 downto 4)="00" THEN
 								set_exec(Regwrena) <= '1';
 							END IF;
 						END IF;
 					ELSE					--addq, subq
-						ea_build_now <= '1';
-						IF opcode(5 downto 3)="001" THEN	
-							set(no_Flags) <= '1';
+						IF opcode(7 downto 3)/="00001" AND
+						   (opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00") THEN --ea illegal modes
+							ea_build_now <= '1';
+							IF opcode(5 downto 3)="001" THEN
+								set(no_Flags) <= '1';
+							END IF;
+							IF opcode(8)='1' THEN
+								set(addsub) <= '1';
+							END IF;
+							write_back <= '1';
+							set_exec(opcADDQ) <= '1';
+							set_exec(opcADD) <= '1';
+							set_exec(ea_data_OP1) <= '1';
+							IF opcode(5 downto 4)="00" THEN
+								set_exec(Regwrena) <= '1';
+							END IF;
+						ELSE
+							trap_illegal <= '1';
+							trapmake <= '1';
 						END IF;
-						IF opcode(8)='1' THEN
-							set(addsub) <= '1';
-						END IF;
-						write_back <= '1';
-						set_exec(opcADDQ) <= '1';
-						set_exec(opcADD) <= '1';
-						set_exec(ea_data_OP1) <= '1';
-						IF opcode(5 downto 4)="00" THEN					
-							set_exec(Regwrena) <= '1';
-						END IF;
-					END IF;	
+					END IF;
 --				
 ---- 0110 ----------------------------------------------------------------------------		
 			WHEN "0110" =>				--bra,bsr,bcc
