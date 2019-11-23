@@ -3060,13 +3060,87 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 						set_exec(Regwrena) <= '1';
 					END IF;
 				END IF;
+--				
+---- 1111 ----------------------------------------------------------------------------		
+			WHEN "1111" =>
+				IF cpu(1)='1' AND opcode(8 downto 6)="100" THEN --cpSAVE
+					IF opcode(5 downto 4)/="00" AND opcode(5 downto 3)/="011" AND
+					   (opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00") THEN --ea illegal modes
+						IF opcode(11 downto 9)/="000" THEN
+							IF SVmode='1' THEN
+								IF opcode(5)='0' AND opcode(5 downto 4)/="01" THEN
+									--never reached according to cputest?!
+									--cpSAVE not implemented
+									trap_illegal <= '1';
+									trapmake <= '1';
+								ELSE
+									trap_1111 <= '1';
+									trapmake <= '1';
+								END IF;
+							ELSE
+								trap_priv <= '1';
+								trapmake <= '1';
+							END IF;
+						ELSE
+							IF SVmode='1' THEN
+								trap_1111 <= '1';
+								trapmake <= '1';
+							ELSE
+								trap_priv <= '1';
+								trapmake <= '1';
+							END IF;
+						END IF;
+					ELSE
+						trap_1111 <= '1';
+						trapmake <= '1';
+					END IF;
+				ELSIF cpu(1)='1' AND opcode(8 downto 6)="101" THEN --cpRESTORE
+					IF opcode(5 downto 4)/="00" AND opcode(5 downto 3)/="100" AND
+					   (opcode(5 downto 3)/="111" OR (opcode(2 downto 1)/="11" AND
+					   opcode(2 downto 0)/="101")) THEN --ea illegal modes
+						IF opcode(5 downto 1)/="11110" THEN
+							IF opcode(11 downto 9)="001" OR opcode(11 downto 9)="010" THEN
+								IF SVmode='1' THEN
+									IF opcode(5 downto 3)="101" THEN
+										--cpRESTORE not implemented
+										trap_illegal <= '1';
+										trapmake <= '1';
+									ELSE
+										trap_1111 <= '1';
+										trapmake <= '1';
+									END IF;
+								ELSE
+									trap_priv <= '1';
+									trapmake <= '1';
+								END IF;
+							ELSE
+								IF SVmode='1' THEN
+									trap_1111 <= '1';
+									trapmake <= '1';
+								ELSE
+									trap_priv <= '1';
+									trapmake <= '1';
+								END IF;
+							END IF;
+						ELSE
+							trap_1111 <= '1';
+							trapmake <= '1';
+						END IF;
+					ELSE
+						trap_1111 <= '1';
+						trapmake <= '1';
+					END IF;
+				ELSE
+					trap_1111 <= '1';
+					trapmake <= '1';
+				END IF;
 --							
 ----      ----------------------------------------------------------------------------		
-			WHEN OTHERS =>	
-				trap_1111 <= '1';
+			WHEN OTHERS =>
+				trap_illegal <= '1';
 				trapmake <= '1';
 
-		END CASE;		
+		END CASE;
 
 -- use for AND, OR, EOR, CMP
 		IF build_logical='1' THEN
