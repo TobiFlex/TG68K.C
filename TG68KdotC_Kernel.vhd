@@ -22,6 +22,7 @@
 ------------------------------------------------------------------------------
 
 -- 15.02.2020 TG bugfix DIVS.W with result $8000
+-- 08.01.2020 TH fix the byte-mirroring
 -- 25.11.2019 TG bugfix ILLEGAL.B handling
 -- 24.11.2019 TG next try CMP2 and CHK2.l
 -- 24.11.2019 retrofun(RF) commit ILLEGAL.B handling 
@@ -3937,6 +3938,8 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 				WHEN div_end2	=>		-- divu
 					IF exec(Regwrena)='1' THEN
 						set(Regwrena) <= '1';
+					ELSE	
+						set(no_Flags) <= '1';
 					END IF;
 					dest_2ndHbits <= '1';
 					set(opcDIVU) <= '1';
