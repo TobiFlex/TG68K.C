@@ -1,7 +1,7 @@
 ------------------------------------------------------------------------------
 ------------------------------------------------------------------------------
 --                                                                          --
--- Copyright (c) 2009-2019 Tobias Gubener                                   -- 
+-- Copyright (c) 2009-2020 Tobias Gubener                                   -- 
 -- Patches by MikeJ, Till Harbaum, Rok Krajnk, ...                          --
 -- Subdesign fAMpIGA by TobiFlex                                            --
 --                                                                          --
@@ -21,6 +21,7 @@
 ------------------------------------------------------------------------------
 ------------------------------------------------------------------------------
 
+-- 15.02.2020 TG bugfix DIVS.W with result $8000
 -- 25.11.2019 TG bugfix ILLEGAL.B handling
 -- 24.11.2019 TG next try CMP2 and CHK2.l
 -- 24.11.2019 retrofun(RF) commit ILLEGAL.B handling 
@@ -70,7 +71,6 @@
 -- (CALLM)
 -- (RETM)
 
--- bugfix DIVS.W
 -- bugfix CHK2, CMP2
 -- rework barrel shifter 
 -- CHK2
@@ -517,7 +517,14 @@ PROCESS (long_start, reg_QB, data_write_tmp, exec, data_read, data_write_mux, me
 		ELSIF memmaskmux(3)='0' THEN	
 			data_write <= data_write_mux(31 downto 16);
 		ELSE
-			data_write <= data_write_mux(15 downto 0);
+-- a single byte shows up on both bus halfs
+			IF memmaskmux(5 downto 4) = "10" THEN
+				data_write <= data_write_mux(7 downto 0) & data_write_mux(7 downto 0);
+			ELSIF memmaskmux(5 downto 4) = "01" THEN
+				data_write <= data_write_mux(15 downto 8) & data_write_mux(15 downto 8);
+			ELSE
+				data_write <= data_write_mux(15 downto 0);
+			END IF;
 		END IF;
 		IF exec(mem_byte)='1' THEN	--movep
 			data_write(7 downto 0) <= data_write_tmp(15 downto 8);
@@ -2242,9 +2249,6 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 												set(ld_rot_cnt) <= '1';
 											END IF;
 										END IF;
-										IF z_error='0' AND set_V_Flag='0' AND set(opcDIVU)='1' THEN
-											set(Regwrena) <= '1';
-										END IF;
 										source_lowbits <='1';
 										IF nextpass='1' OR (opcode(5 downto 4)="00" AND decodeOPC='1') THEN	
 											dest_hbits <= '1';
@@ -3919,6 +3923,9 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 						next_micro_state <= div4;
 					END IF;
 				WHEN div_end1	=>		-- divu
+					IF z_error='0' AND set_V_Flag='0' THEN
+						set(Regwrena) <= '1';
+					END IF;
 					IF opcode(15)='0' AND (DIV_Mode=1 OR DIV_Mode=2) THEN
 						dest_2ndLbits <= '1';
 						set(write_reminder) <= '1';
@@ -3928,8 +3935,10 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 					set(opcDIVU) <= '1';
 					datatype <= "10";
 				WHEN div_end2	=>		-- divu
+					IF exec(Regwrena)='1' THEN
+						set(Regwrena) <= '1';
+					END IF;
 					dest_2ndHbits <= '1';
-					source_2ndLbits <= '1';--???
 					set(opcDIVU) <= '1';
 					
 				WHEN rota1	=>
