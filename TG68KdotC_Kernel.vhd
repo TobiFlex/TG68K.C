@@ -22,6 +22,10 @@
 ------------------------------------------------------------------------------
 
 -- 15.02.2020 TG bugfix DIVS.W with result $8000
+<<<<<<< HEAD
+=======
+-- 08.01.2020 TH fix the byte-mirroring
+>>>>>>> 8c2e9843220347e6d2d59e24c03d8eb36f20774c
 -- 25.11.2019 TG bugfix ILLEGAL.B handling
 -- 24.11.2019 TG next try CMP2 and CHK2.l
 -- 24.11.2019 retrofun(RF) commit ILLEGAL.B handling 
@@ -2208,7 +2212,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 							ELSE
 								IF opcode(10)='1' THEN						--MUL.L, DIV.L 68020
 	 --FPGA Multiplier for long							
-									IF opcode(8 downto 7)="00" AND opcode(5 downto 3)/="001" AND --ea An illegal mode
+									IF opcode(8 downto 7)="00" AND opcode(5 downto 3)/="001" AND (opcode(5 downto 2)/="1111" OR opcode(1 downto 0)="00") AND--ea An illegal mode
 									   MUL_Hardware=1 AND (opcode(6)='0' AND (MUL_Mode=1 OR (cpu(1)='1' AND MUL_Mode=2))) THEN
 										IF decodeOPC='1' THEN
 											next_micro_state <= nop;
@@ -3937,6 +3941,11 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 				WHEN div_end2	=>		-- divu
 					IF exec(Regwrena)='1' THEN
 						set(Regwrena) <= '1';
+<<<<<<< HEAD
+=======
+					ELSE	
+						set(no_Flags) <= '1';
+>>>>>>> 8c2e9843220347e6d2d59e24c03d8eb36f20774c
 					END IF;
 					dest_2ndHbits <= '1';
 					set(opcDIVU) <= '1';
