@@ -21,10 +21,7 @@
 ------------------------------------------------------------------------------
 ------------------------------------------------------------------------------
 
-<<<<<<< HEAD
 -- 17.03.2020 TG bugfix move data to (extended address)
-=======
->>>>>>> 5d5da2d3cf73711e1c45183ee314a764b5df998a
 -- 13.03.2020 TG bugfix extended addess mode - thanks Adam Polkosnik
 -- 15.02.2020 TG bugfix DIVS.W with result $8000
 -- 08.01.2020 TH fix the byte-mirroring
