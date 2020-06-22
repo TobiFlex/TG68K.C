@@ -124,6 +124,7 @@ entity TG68KdotC_Kernel is
 		nUDS						: out std_logic;
 		nLDS						: out std_logic;
 		busstate					: out std_logic_vector(1 downto 0);	-- 00-> fetch code 10->read data 11->write data 01->no memaccess
+		longword					: out std_logic;
 		nResetOut				: out std_logic;
 		FC							: out std_logic_vector(2 downto 0);
 		clr_berr					: out std_logic;
@@ -408,6 +409,9 @@ ALU: TG68K_ALU
 		ALUout => ALUout						--: buffer std_logic_vector(31 downto 0)
 	);
 
+	-- AMR - let the parent module know this is a longword access.  (Easy way to enable burst writes.)
+	longword <= not memmaskmux(3);
+	
 	long_start_alu <= to_bit(NOT memmaskmux(3));
 	execOPC_ALU <= execOPC OR exec(alu_exec);
 	process (memmaskmux)
