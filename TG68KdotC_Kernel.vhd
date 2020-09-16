@@ -1354,7 +1354,11 @@ PROCESS (clk, Reset, FlagsSR, last_data_read, OP2out, exec)
 					ELSE
 						SVmode <= preSVmode;
 					END IF;	
-				END IF;	
+				END IF;
+				IF trap_berr='1' or trap_illegal='1' or trap_addr_error='1' or trap_priv='1' THEN
+					make_trace <= '0';
+					FlagsSR(7) <= '0';
+				END IF;
 				IF set(changeMode)='1' THEN
 					preSVmode <= NOT preSVmode;
 					FlagsSR(5) <= NOT preSVmode;
