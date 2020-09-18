@@ -3974,7 +3974,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 -----------------------------------------------------------------------------
 -- MOVEC
 -----------------------------------------------------------------------------
-  process (clk, VBR, CACR, brief)
+  process (clk, SFC, DFC, VBR, CACR, brief)
   begin
 	-- all other hexa codes should give illegal isntruction exception
 	if rising_edge(clk) then
@@ -3983,8 +3983,8 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 		CACR <= (others => '0');
 	  elsif clkena_lw = '1' and exec(movec_wr) = '1' then
 		case brief(11 downto 0) is
-		  when X"000" => NULL; -- SFC -- 68010+
-		  when X"001" => NULL; -- DFC -- 68010+
+		  when X"000" => SFC <= reg_QA(2 downto 0); -- SFC -- 68010+
+		  when X"001" => DFC <= reg_QA(2 downto 0); -- DFC -- 68010+
 		  when X"002" => CACR <= reg_QA(3 downto 0); -- 68020+
 		  when X"800" => NULL; -- USP -- 68010+
 		  when X"801" => VBR <= reg_QA; -- 68010+
@@ -3998,6 +3998,8 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 
 	movec_data <= (others => '0');
 	case brief(11 downto 0) is
+		when X"000" => movec_data <= "00000000000000000000000000000" & SFC;
+		when X"001" => movec_data <= "00000000000000000000000000000" & DFC;
 	  when X"002" => movec_data <= "0000000000000000000000000000" & (CACR AND "0011");
 
 	  when X"801" => 
