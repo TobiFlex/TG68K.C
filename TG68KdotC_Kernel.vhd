@@ -220,6 +220,7 @@ architecture logic of TG68KdotC_Kernel is
 	signal writePC				: bit;
 	signal writePCbig			: bit;
 	signal set_writePCbig	: bit;
+	signal writePCnext		: bit;
 	signal setopcode			: bit;
 	signal decodeOPC			: bit;
 	signal execOPC				: bit;
@@ -731,6 +732,7 @@ PROCESS (clk)
 				direct_data <= '0';
 				use_direct_data <= '0';
 				Z_error <= '0';
+				writePCnext <= '0';
 			ELSIF clkena_lw='1' THEN
 				useStackframe2<='0';
 				direct_data <= '0';
@@ -748,6 +750,7 @@ PROCESS (clk)
 				IF endOPC='1' THEN
 					store_in_tmp <='0';
 					Z_error <= '0';
+					writepcnext <= '0';
 				ELSE
 					IF set_Z_error='1'  THEN
 						Z_error <= '1';
@@ -780,6 +783,7 @@ PROCESS (clk)
 				elsif micro_state=trap00 THEN
 					data_write_tmp <= exe_pc; --TH
 					useStackframe2<='1';
+					writePCnext <= trap_trap OR trap_trapv OR exec(trap_chk) OR Z_error;
 				elsif micro_state = trap0 then
 		  -- this is only active for 010+ since in 000 writePC is
 		  -- true in state trap0
@@ -789,6 +793,7 @@ PROCESS (clk)
 						data_write_tmp(15 downto 0) <= "0010" & trap_vector(11 downto 0); --TH
 					else
 						data_write_tmp(15 downto 0) <= "0000" & trap_vector(11 downto 0);
+						writePCnext <= trap_trap OR trap_trapv OR exec(trap_chk) OR Z_error;
 					end if;
 ------------------------------------
 --				ELSIF micro_state=trap0 THEN	
@@ -995,7 +1000,7 @@ PROCESS (clk, IPL, setstate, addrvalue, state, exec_write_back, set_direct_data,
 			ELSE	
 				PC_datab(2) <= '1';
 			END IF;
-			IF trap_trap='1' OR trap_trapv='1' OR exec(trap_chk)='1' OR Z_error='1' THEN 
+			IF writePCnext = '1' THEN
 				PC_datab(1) <= '1';
 			END IF;
 		ELSIF state="00" THEN
