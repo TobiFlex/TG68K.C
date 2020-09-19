@@ -1493,8 +1493,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 			setstate <= "01";
 		END IF;	
 		IF trapmake='1' AND trapd='0' THEN
---			IF use_VBR_Stackframe='1' AND (trap_trapv='1' OR set_Z_error='1' OR exec(opcCHK)='1') THEN
-			IF use_VBR_Stackframe='1' AND (trap_trapv='1' OR set_Z_error='1' OR exec(trap_chk)='1') THEN
+			IF cpu(1)='1' AND (trap_trapv='1' OR set_Z_error='1' OR exec(trap_chk)='1') THEN
 				next_micro_state <= trap00;
 			else
 				next_micro_state <= trap0;
@@ -1510,7 +1509,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 		END IF;	
 		IF micro_state=int1 OR (interrupt='1' AND trap_trace='1') THEN
 -- paste and copy form TH	---------	
-			if trap_trace='1' AND use_VBR_Stackframe='1' then
+			if trap_trace='1' AND cpu(1) = '1' then
 				next_micro_state <= trap00;  --TH
 			else
 				next_micro_state <= trap0;
