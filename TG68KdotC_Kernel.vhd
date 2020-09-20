@@ -220,6 +220,7 @@ architecture logic of TG68KdotC_Kernel is
 	signal writePC				: bit;
 	signal writePCbig			: bit;
 	signal set_writePCbig	: bit;
+	signal writePCnext		: bit;
 	signal setopcode			: bit;
 	signal decodeOPC			: bit;
 	signal execOPC				: bit;
@@ -731,6 +732,7 @@ PROCESS (clk)
 				direct_data <= '0';
 				use_direct_data <= '0';
 				Z_error <= '0';
+				writePCnext <= '0';
 			ELSIF clkena_lw='1' THEN
 				useStackframe2<='0';
 				direct_data <= '0';
@@ -748,6 +750,7 @@ PROCESS (clk)
 				IF endOPC='1' THEN
 					store_in_tmp <='0';
 					Z_error <= '0';
+					writepcnext <= '0';
 				ELSE
 					IF set_Z_error='1'  THEN
 						Z_error <= '1';
@@ -780,6 +783,7 @@ PROCESS (clk)
 				elsif micro_state=trap00 THEN
 					data_write_tmp <= exe_pc; --TH
 					useStackframe2<='1';
+					writePCnext <= trap_trap OR trap_trapv OR exec(trap_chk) OR Z_error;
 				elsif micro_state = trap0 then
 		  -- this is only active for 010+ since in 000 writePC is
 		  -- true in state trap0
@@ -789,6 +793,7 @@ PROCESS (clk)
 						data_write_tmp(15 downto 0) <= "0010" & trap_vector(11 downto 0); --TH
 					else
 						data_write_tmp(15 downto 0) <= "0000" & trap_vector(11 downto 0);
+						writePCnext <= trap_trap OR trap_trapv OR exec(trap_chk) OR Z_error;
 					end if;
 ------------------------------------
 --				ELSIF micro_state=trap0 THEN	
@@ -995,7 +1000,7 @@ PROCESS (clk, IPL, setstate, addrvalue, state, exec_write_back, set_direct_data,
 			ELSE	
 				PC_datab(2) <= '1';
 			END IF;
-			IF trap_trap='1' OR trap_trapv='1' OR exec(trap_chk)='1' OR Z_error='1' THEN 
+			IF writePCnext = '1' THEN
 				PC_datab(1) <= '1';
 			END IF;
 		ELSIF state="00" THEN
@@ -1493,8 +1498,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 			setstate <= "01";
 		END IF;	
 		IF trapmake='1' AND trapd='0' THEN
---			IF use_VBR_Stackframe='1' AND (trap_trapv='1' OR set_Z_error='1' OR exec(opcCHK)='1') THEN
-			IF use_VBR_Stackframe='1' AND (trap_trapv='1' OR set_Z_error='1' OR exec(trap_chk)='1') THEN
+			IF cpu(1)='1' AND (trap_trapv='1' OR set_Z_error='1' OR exec(trap_chk)='1') THEN
 				next_micro_state <= trap00;
 			else
 				next_micro_state <= trap0;
@@ -1510,7 +1514,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 		END IF;	
 		IF micro_state=int1 OR (interrupt='1' AND trap_trace='1') THEN
 -- paste and copy form TH	---------	
-			if trap_trace='1' AND use_VBR_Stackframe='1' then
+			if trap_trace='1' AND cpu(1) = '1' then
 				next_micro_state <= trap00;  --TH
 			else
 				next_micro_state <= trap0;
@@ -3974,7 +3978,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 -----------------------------------------------------------------------------
 -- MOVEC
 -----------------------------------------------------------------------------
-  process (clk, VBR, CACR, brief)
+  process (clk, SFC, DFC, VBR, CACR, brief)
   begin
 	-- all other hexa codes should give illegal isntruction exception
 	if rising_edge(clk) then
@@ -3983,8 +3987,8 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 		CACR <= (others => '0');
 	  elsif clkena_lw = '1' and exec(movec_wr) = '1' then
 		case brief(11 downto 0) is
-		  when X"000" => NULL; -- SFC -- 68010+
-		  when X"001" => NULL; -- DFC -- 68010+
+		  when X"000" => SFC <= reg_QA(2 downto 0); -- SFC -- 68010+
+		  when X"001" => DFC <= reg_QA(2 downto 0); -- DFC -- 68010+
 		  when X"002" => CACR <= reg_QA(3 downto 0); -- 68020+
 		  when X"800" => NULL; -- USP -- 68010+
 		  when X"801" => VBR <= reg_QA; -- 68010+
@@ -3998,6 +4002,8 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 
 	movec_data <= (others => '0');
 	case brief(11 downto 0) is
+		when X"000" => movec_data <= "00000000000000000000000000000" & SFC;
+		when X"001" => movec_data <= "00000000000000000000000000000" & DFC;
 	  when X"002" => movec_data <= "0000000000000000000000000000" & (CACR AND "0011");
 
 	  when X"801" => 
