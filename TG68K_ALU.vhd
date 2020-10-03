@@ -843,7 +843,7 @@ process (OP1out, OP2out, opcode, bit_nr, bit_msb, bs_shift, bs_shift_mod, ring, 
 		-- bs_shift_mod <= std_logic_vector(unsigned(bs_shift) rem unsigned(ring));
 		-- replace the divider with logic
 		CASE ring IS
-			WHEN "001001" =>ty
+			WHEN "001001" =>
 				IF bs_shift = 63 THEN
 					bs_shift_mod <= "000000";
 				ELSIF bs_shift > 6*9-1 THEN
