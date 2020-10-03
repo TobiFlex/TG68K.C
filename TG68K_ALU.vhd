@@ -880,7 +880,7 @@ process (OP1out, OP2out, opcode, bit_nr, bit_msb, bs_shift, bs_shift_mod, ring, 
 			WHEN "001000" => bs_shift_mod <= "000" & bs_shift(2 downto 0);
 			WHEN "010000" => bs_shift_mod <=  "00" & bs_shift(3 downto 0);
 			WHEN "100000" => bs_shift_mod <=   "0" & bs_shift(4 downto 0);
-			WHEN OTHERS => NULL;
+			WHEN OTHERS => bs_shift_mod <= (OTHERS => '0');
 		END CASE;
 
 		bit_nr <= bs_shift_mod(5 downto 0);
