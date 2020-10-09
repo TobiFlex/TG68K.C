@@ -1304,7 +1304,7 @@ PROCESS (clk)
 					IF DIV_Mode=0 THEN
 						div_over(32 downto 16) <= ('0'&div_reg(47 downto 32))-('0'&OP2out(15 downto 0));
 					ELSE	
-						div_over <= ('0'&div_reg(63 downto 32))-('0'&OP2out);
+						div_over <= ('0'&div_reg(63 downto 32))-('0'&OP2outext(15 downto 0)&OP2out(15 downto 0));
 					END IF;	
 				END IF;
 				IF exec(write_reminder)='0' THEN
