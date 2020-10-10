@@ -21,6 +21,7 @@
 ------------------------------------------------------------------------------
 ------------------------------------------------------------------------------
 
+-- 10.10.2020 TG bugfix division N-flag
 -- 09.10.2020 TG bugfix division overflow
 -- 2/3.10.2020 some tweaks by retrofun, gyurco and robinsonb5
 -- 17.03.2020 TG bugfix move data to (extended address)

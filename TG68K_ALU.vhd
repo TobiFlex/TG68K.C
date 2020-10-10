@@ -1284,7 +1284,9 @@ PROCESS (clk)
 	BEGIN
 		IF rising_edge(clk) THEN
 			IF clkena_lw='1' THEN
-				V_Flag <= set_V_Flag;
+				IF micro_state/=div_end2 THEN
+					V_Flag <= set_V_Flag;
+				END IF;
 				signedOP <= divs;
 				IF micro_state=div1 THEN
 					nozero <= '0';
