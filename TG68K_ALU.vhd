@@ -1011,12 +1011,15 @@ PROCESS (clk, Reset, exe_opcode, exe_datatype, Flags, last_data_read, OP2out, fl
 				IF exec(to_CCR)='1' THEN
 					Flags(7 downto 0) <= CCRin(7 downto 0);			--CCR
 				ELSIF Z_error='1' THEN
-					IF exe_opcode(8)='0' THEN
+					IF micro_state = trap0 THEN
+						-- Undocumented behavior (flags when div by zero)
+						IF exe_opcode(8)='0' THEN
 --						Flags(3 downto 0) <= reg_QA(31)&"000";
-						Flags(3 downto 0) <= '0'&NOT reg_QA(31)&"00";
-					ELSE
-						Flags(3 downto 0) <= "0100";
-					END IF;		
+							Flags(3 downto 0) <= '0'&NOT reg_QA(31)&"00";
+						ELSE
+							Flags(3 downto 0) <= "0100";
+						END IF;
+					END IF;
 				ELSIF exec(no_Flags)='0' THEN
 					last_Flags1 <= Flags(3 downto 0);
 					IF exec(opcADD)='1' THEN

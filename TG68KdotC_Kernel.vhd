@@ -1372,7 +1372,7 @@ PROCESS (clk, Reset, FlagsSR, last_data_read, OP2out, exec)
 						SVmode <= preSVmode;
 					END IF;	
 				END IF;
-				IF trap_berr='1' or trap_illegal='1' or trap_addr_error='1' or trap_priv='1' THEN
+				IF trap_berr='1' OR trap_illegal='1' OR trap_addr_error='1' OR trap_priv='1' OR trap_1010='1' OR trap_1111='1' THEN
 					make_trace <= '0';
 					FlagsSR(7) <= '0';
 				END IF;
@@ -1768,7 +1768,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 				ELSE								--andi, ...xxxi
 					IF opcode(7 downto 6)/="11" AND opcode(5 downto 3)/="001" THEN --ea An illegal mode
 						IF opcode(11 downto 9)="000" THEN	--ORI
-							IF opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00" OR opcode(2 downto 0)="100" THEN
+							IF opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00" OR (opcode(2 downto 0)="100" AND opcode(7)='0') THEN
 								set_exec(opcOR) <= '1';
 							ELSE
 								trap_illegal <= '1';
@@ -1776,7 +1776,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 							END IF;
 						END IF;
 						IF opcode(11 downto 9)="001" THEN	--ANDI
-							IF opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00" OR opcode(2 downto 0)="100" THEN
+							IF opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00" OR (opcode(2 downto 0)="100" AND opcode(7)='0') THEN
 								set_exec(opcAND) <= '1';
 							ELSE
 								trap_illegal <= '1';
@@ -1792,7 +1792,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 							END IF;
 						END IF;
 						IF opcode(11 downto 9)="101" THEN	--EORI
-							IF opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00" OR opcode(2 downto 0)="100" THEN
+							IF opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00" OR (opcode(2 downto 0)="100" AND opcode(7)='0') THEN
 								set_exec(opcEOR) <= '1';
 							ELSE
 								trap_illegal <= '1';
@@ -2648,7 +2648,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 								trap_illegal <= '1';
 								trapmake <= '1';
 							END IF;
-						ELSE				--Scc
+						ELSIF (opcode(5 downto 3)/="111" OR opcode(2 downto 1)="00") THEN --Scc
 							datatype <= "00";			--Byte
 							ea_build_now <= '1';
 							write_back <= '1';
@@ -2659,6 +2659,9 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 							IF opcode(5 downto 4)="00" THEN
 								set_exec(Regwrena) <= '1';
 							END IF;
+						ELSE
+							trap_illegal <= '1';
+							trapmake <= '1';
 						END IF;
 					ELSE					--addq, subq
 						IF opcode(7 downto 3)/="00001" AND
