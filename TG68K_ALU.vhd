@@ -1070,16 +1070,19 @@ PROCESS (clk, Reset, exe_opcode, exe_datatype, Flags, last_data_read, OP2out, fl
 						Flags(1) <= BS_V;
 					ELSIF exec(opcBITS)='1' THEN
 						Flags(2) <= NOT one_bit_in;	
-					ELSIF exec(opcCHK2)='1' THEN
-						Flags(0) <= '0';
-						Flags(2) <= Flags(2) OR set_flags(2);
+					ELSIF exec(opcCHK2)='1' THEN		--micro_state = chk23
+--micro_state	 chk21   chk22   chk23
+--OP1out      		UB		R			R
+--OP2out				LB		LB			UB					
 ----lower bound first
 						IF last_Flags1(0)='0' THEN			--unsigned OP
 							Flags(0) <= Flags(0) OR (NOT set_flags(0) AND NOT set_flags(2));
 						ELSE										--signed OP
-							Flags(0) <= (Flags(3) AND NOT Flags(1)) OR (NOT Flags(3) AND Flags(1)) OR																				--LT
-										   (set_flags(3) AND set_flags(1) AND NOT set_flags(2)) OR (NOT set_flags(3) AND NOT set_flags(1) AND NOT set_flags(2));	--GT
+							Flags(0) <= (Flags(0) XOR set_flags(0)) AND  NOT Flags(2) AND NOT set_flags(2);
 						END IF;
+						Flags(1) <= '0';
+						Flags(2) <= Flags(2) OR set_flags(2);
+						Flags(3) <= NOT last_Flags1(0); 
 					ELSIF exec(opcCHK)='1' THEN
 						IF exe_datatype="01" THEN 						--Word
 							Flags(3) <= OP1out(15);
