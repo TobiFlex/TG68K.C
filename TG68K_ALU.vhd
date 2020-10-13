@@ -43,7 +43,8 @@ generic(
 		exe_condition			: in std_logic;
 		exec_tas					: in std_logic;
 		long_start				: in bit;
-		memmaskmux				: in std_logic_vector(6 downto 0);
+		non_aligned				: in std_logic;
+		check_aligned			: in std_logic;
 		movem_presub			: in bit;
 		set_stop					: in bit;
 		Z_error 					: in bit;
@@ -286,7 +287,7 @@ PROCESS (OP2out, reg_QB, opcode, OP1out, OP1in, exe_datatype, addsub_q, execOPC,
 -- addsub
 -----------------------------------------------------------------------------
 PROCESS (OP1out, OP2out, execOPC, Flags, long_start, movem_presub, exe_datatype, exec, addsub_a, addsub_b, opaddsub,
-	     notaddsub_b, add_result, c_in, sndOPC, memmaskmux)
+	     notaddsub_b, add_result, c_in, sndOPC, non_aligned, check_aligned)
 	BEGIN
 		addsub_a <= OP1out;
 		IF exec(get_bfoffset)='1' THEN	
@@ -317,11 +318,7 @@ PROCESS (OP1out, OP2out, execOPC, Flags, long_start, movem_presub, exe_datatype,
 					addsub_b <= "00000000000000000000000000000100";
 				END IF;
 			ELSE 
-				IF memmaskmux(6 downto 4) = "001" THEN  --un-aligned accesses
-					addsub_b <= "00000000000000000000000000000000";
-				ELSE	
-					addsub_b <= "00000000000000000000000000000010";
-				END IF;
+				addsub_b <= "00000000000000000000000000000010";
 			END IF;
 		ELSE	
 			IF (exec(use_XZFlag)='1' AND Flags(4)='1') OR exec(opcCHK)='1' THEN 
@@ -329,15 +326,23 @@ PROCESS (OP1out, OP2out, execOPC, Flags, long_start, movem_presub, exe_datatype,
 			END IF;
 			opaddsub <= exec(addsub);
 		END IF;
-		
-	-- patch for un-aligned movem --mikej
-		IF movem_presub = '1' AND memmaskmux(6 downto 4) = "001" THEN  --un-aligned accessest
-			IF (exe_datatype = "10") then
+
+		-- patch for un-aligned movem --mikej
+		if exec(movem_action)='1' OR check_aligned='1' then
+		  if (movem_presub = '0') then -- up
+			if (non_aligned = '1') and (long_start = '0') then -- hold
+			  addsub_b <= (others => '0');
+			end if;
+		  else
+			if (non_aligned = '1') and (long_start = '0') then
+			  if (exe_datatype = "10") then
 				addsub_b <= "00000000000000000000000000001000";
-			ELSE
+			  else
 				addsub_b <= "00000000000000000000000000000100";
-			END IF;
-		END IF;
+			  end if;
+			end if;
+		  end if;
+		end if;
 
 		IF opaddsub='0' OR long_start='1' THEN		--ADD
 			notaddsub_b <= '0'&addsub_b&c_in(0);
@@ -1071,9 +1076,9 @@ PROCESS (clk, Reset, exe_opcode, exe_datatype, Flags, last_data_read, OP2out, fl
 --OP1out      		UB		R			R
 --OP2out				LB		LB			UB					
 ----lower bound first
-						IF last_Flags1(0)='0' THEN			--unsigned OP   LB<=UB
+						IF last_Flags1(0)='0' THEN			--unsigned OP
 							Flags(0) <= Flags(0) OR (NOT set_flags(0) AND NOT set_flags(2));
-						ELSE										--signed OP		UB<LB
+						ELSE										--signed OP
 							Flags(0) <= (Flags(0) XOR set_flags(0)) AND  NOT Flags(2) AND NOT set_flags(2);
 						END IF;
 						Flags(1) <= '0';

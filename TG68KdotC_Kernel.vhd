@@ -21,7 +21,7 @@
 ------------------------------------------------------------------------------
 ------------------------------------------------------------------------------
 
--- 12/13.10.2020 TG rework un-aligned accesses
+-- 13.10.2020 TG go back to old aligned design and bugfix chk2
 -- 11.10.2020 TG next try CHK2 flags
 -- 10.10.2020 TG bugfix division N-flag
 -- 09.10.2020 TG bugfix division overflow
@@ -323,12 +323,14 @@ architecture logic of TG68KdotC_Kernel is
 --	signal byte					: bit;
 	signal long_start			: bit;
 	signal long_start_alu	: bit;
+	signal non_aligned		: std_logic;
+	signal check_aligned		: std_logic;
 	signal long_done			: bit;
-	signal memmask				: std_logic_vector(6 downto 0);
+	signal memmask				: std_logic_vector(5 downto 0);
 	signal set_memmask		: std_logic_vector(5 downto 0);
 	signal memread				: std_logic_vector(3 downto 0);
 	signal wbmemmask			: std_logic_vector(5 downto 0);
-	signal memmaskmux			: std_logic_vector(6 downto 0);
+	signal memmaskmux			: std_logic_vector(5 downto 0);
 	signal oddout				: std_logic;
 	signal set_oddout			: std_logic;
 	signal PCbase				: std_logic;
@@ -383,7 +385,8 @@ ALU: TG68K_ALU
 		exe_condition => exe_condition,	--: in std_logic;
 		exec_tas => exec_tas,				--: in std_logic;
 		long_start => long_start_alu,		--: in bit;
-		memmaskmux => memmaskmux,			--: in std_logic_vector(6 downto 0);
+		non_aligned => non_aligned,
+		check_aligned => check_aligned,
 		movem_presub => movem_presub,		--: in bit;
 		set_stop => set_stop,				--: in bit;
 		Z_error => Z_error,					--: in bit;
@@ -421,8 +424,14 @@ ALU: TG68K_ALU
 	
 	long_start_alu <= to_bit(NOT memmaskmux(3));
 	execOPC_ALU <= execOPC OR exec(alu_exec);
-
-	-----------------------------------------------------------------------------
+	process (memmaskmux)
+	begin
+		non_aligned <= '0';
+		if (memmaskmux(5 downto 4) = "01") or (memmaskmux(5 downto 4) = "10") then
+			non_aligned <= '1';
+		end if;
+	end process;
+-----------------------------------------------------------------------------
 -- Bus control
 -----------------------------------------------------------------------------
    regin_out <= regin;
@@ -434,7 +443,7 @@ ALU: TG68K_ALU
 	
 	-- does shift for byte access. note active low me
 	-- should produce address error on 68000
-	memmaskmux <= memmask when addr(0) = '1' else memmask(5 downto 0) & '1';
+	memmaskmux <= memmask when addr(0) = '1' else memmask(4 downto 0) & '1';
 	nUDS <= memmaskmux(5);
 	nLDS <= memmaskmux(4);
 	clkena_lw <= '1' WHEN clkena_in='1' AND memmaskmux(3)='1' ELSE '0';
@@ -961,14 +970,15 @@ PROCESS (clk, setdisp, memaddr_a, briefdata, memaddr_delta, setdispbyte, datatyp
 				END IF;
 					
 		-- only used for movem address update
-					IF ((memread(0) = '1') and state(1) = '1') or movem_presub = '0' THEN -- fix for unaligned movem mikej
+--					IF (long_done='0' AND state(1)='1') OR movem_presub='0' THEN
+					if ((memread(0) = '1') and state(1) = '1') or movem_presub = '0' then -- fix for unaligned movem mikej
 						memaddr <= addr;
 					END IF;
 			END IF;
 		END IF;
 
 		memaddr_delta <= memaddr_delta_rega + memaddr_delta_regb;
-
+		-- if access done, and not aligned, don't increment
 		addr <= memaddr_reg+memaddr_delta;
 		addr_out <= memaddr_reg + memaddr_delta;
 
@@ -1063,12 +1073,12 @@ PROCESS (clk, IPL, setstate, addrvalue, state, exec_write_back, set_direct_data,
 --				recall_last <= '0';
 				Suppress_Base <= '0'; 
 				make_berr <= '0';
-				memmask <= "1111111";
+				memmask <= "111111";
 				exec_write_back <= '0';
 			ELSE
 --				IPL_nr <= NOT IPL;
 				IF clkena_in='1' THEN
-					memmask <= memmask(4 downto 0)&"11";
+					memmask <= memmask(3 downto 0)&"11";
 					memread <= memread(1 downto 0)&memmaskmux(5 downto 4);
 --					IF wbmemmask(5 downto 4)="11" THEN	
 --						wbmemmask <= memmask;
@@ -1154,30 +1164,30 @@ PROCESS (clk, IPL, setstate, addrvalue, state, exec_write_back, set_direct_data,
 					END IF;	
 					IF (state="10" AND addrvalue='0' AND write_back='1' AND setstate/="10") OR set_rot_cnt/="000001" OR (stop='1' AND interrupt='0') OR set_exec(opcCHK)='1' THEN
 						state <= "01";
-						memmask <= "1111111";
+						memmask <= "111111";
 						addrvalue <= '0';
 					ELSIF execOPC='1' AND exec_write_back='1' THEN
 						state <= "11";
 						FC(1 downto 0) <= "01";
-						memmask <= '1'& wbmemmask;
+						memmask <= wbmemmask;
 						addrvalue <= '0';
 					ELSE	
 						state <= setstate;
 						addrvalue <= setaddrvalue; 
 						IF setstate="01" THEN
-							memmask <= "1111111";
+							memmask <= "111111";
 							wbmemmask <= "111111";
 						ELSIF exec(get_bfoffset)='1' THEN
-							memmask <= '1'& set_memmask;
+							memmask <= set_memmask;
 							wbmemmask <= set_memmask;
 							oddout <= set_oddout;
 						ELSIF set(longaktion)='1' THEN
-							memmask <= "1100001";
+							memmask <= "100001";
 							wbmemmask <= "100001";
 							oddout <= '0';
 --						ELSIF set_datatype="00" AND setstate(1)='1' AND setaddrvalue='0' THEN	
 						ELSIF set_datatype="00" AND setstate(1)='1' THEN	
-							memmask <= "1101111";
+							memmask <= "101111";
 							wbmemmask <= "101111";
 							IF set(mem_byte)='1' THEN
 								oddout <= '0';
@@ -1185,7 +1195,7 @@ PROCESS (clk, IPL, setstate, addrvalue, state, exec_write_back, set_direct_data,
 								oddout <= '1';
 							END IF;	
 						ELSE	
-							memmask <= "1100111";
+							memmask <= "100111";
 							wbmemmask <= "100111";
 							oddout <= '0';
 						END IF;	
@@ -1464,6 +1474,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 --		illegal_read_mode <= '0';
 --		illegal_byteaddr <= '0';
 		set_Z_error <= '0';
+		check_aligned <='0';
 
 		next_micro_state <= idle;
 		build_logical <= '0';
@@ -1734,6 +1745,7 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 								IF micro_state=idle AND nextpass='1' THEN
 									setstate <= "10";
 									set(hold_OP2) <='1';
+									check_aligned <='1';
 									next_micro_state <= chk20;
 								END IF;
 							ELSE
