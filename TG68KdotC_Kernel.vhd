@@ -21,7 +21,7 @@
 ------------------------------------------------------------------------------
 ------------------------------------------------------------------------------
 
--- 12.10.2020 TG rework un-aligned accesses
+-- 12/13.10.2020 TG rework un-aligned accesses
 -- 11.10.2020 TG next try CHK2 flags
 -- 10.10.2020 TG bugfix division N-flag
 -- 09.10.2020 TG bugfix division overflow

@@ -317,18 +317,9 @@ PROCESS (OP1out, OP2out, execOPC, Flags, long_start, movem_presub, exe_datatype,
 					addsub_b <= "00000000000000000000000000000100";
 				END IF;
 			ELSE 
-				IF memmaskmux(6 downto 4) = "001" THEN  --unaligned accesses
-				-- patch for un-aligned movem --mikej
-					IF (movem_presub = '1') then -- up
-						IF (exe_datatype = "10") then
-							addsub_b <= "00000000000000000000000000001000";
-						ELSE
-							addsub_b <= "00000000000000000000000000000100";
-						END IF;
-					ELSE
-						addsub_b <= "00000000000000000000000000000000";
-					END IF;
-				ELSE
+				IF memmaskmux(6 downto 4) = "001" THEN  --un-aligned accesses
+					addsub_b <= "00000000000000000000000000000000";
+				ELSE	
 					addsub_b <= "00000000000000000000000000000010";
 				END IF;
 			END IF;
@@ -337,6 +328,15 @@ PROCESS (OP1out, OP2out, execOPC, Flags, long_start, movem_presub, exe_datatype,
 				c_in(0) <= '1';
 			END IF;
 			opaddsub <= exec(addsub);
+		END IF;
+		
+	-- patch for un-aligned movem --mikej
+		IF movem_presub = '1' AND memmaskmux(6 downto 4) = "001" THEN  --un-aligned accessest
+			IF (exe_datatype = "10") then
+				addsub_b <= "00000000000000000000000000001000";
+			ELSE
+				addsub_b <= "00000000000000000000000000000100";
+			END IF;
 		END IF;
 
 		IF opaddsub='0' OR long_start='1' THEN		--ADD
