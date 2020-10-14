@@ -21,6 +21,7 @@
 ------------------------------------------------------------------------------
 ------------------------------------------------------------------------------
 
+-- 14.10.2020 TG bugfix chk2.b
 -- 13.10.2020 TG go back to old aligned design and bugfix chk2
 -- 11.10.2020 TG next try CHK2 flags
 -- 10.10.2020 TG bugfix division N-flag
@@ -1745,7 +1746,9 @@ PROCESS (clk, cpu, OP1out, OP2out, opcode, exe_condition, nextpass, micro_state,
 								IF micro_state=idle AND nextpass='1' THEN
 									setstate <= "10";
 									set(hold_OP2) <='1';
-									check_aligned <='1';
+									IF exe_datatype/="00" THEN
+										check_aligned <='1';
+									END IF;
 									next_micro_state <= chk20;
 								END IF;
 							ELSE
