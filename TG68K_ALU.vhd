@@ -86,7 +86,6 @@ architecture logic of TG68K_ALU is
 	signal OP1in				: std_logic_vector(31 downto 0);
 	signal addsub_a			: std_logic_vector(31 downto 0);
 	signal addsub_b			: std_logic_vector(31 downto 0);
-	signal notaddsub_b		: std_logic_vector(33 downto 0);
 	signal add_result			: std_logic_vector(33 downto 0);
 	signal addsub_ofl			: std_logic_vector(2 downto 0);
 	signal opaddsub			: bit;
@@ -287,7 +286,7 @@ PROCESS (OP2out, reg_QB, opcode, OP1out, OP1in, exe_datatype, addsub_q, execOPC,
 -- addsub
 -----------------------------------------------------------------------------
 PROCESS (OP1out, OP2out, execOPC, Flags, long_start, movem_presub, exe_datatype, exec, addsub_a, addsub_b, opaddsub,
-	     notaddsub_b, add_result, c_in, sndOPC, non_aligned, check_aligned)
+	     add_result, c_in, sndOPC, non_aligned, check_aligned)
 	BEGIN
 		addsub_a <= OP1out;
 		IF exec(get_bfoffset)='1' THEN	
@@ -345,11 +344,10 @@ PROCESS (OP1out, OP2out, execOPC, Flags, long_start, movem_presub, exe_datatype,
 		end if;
 
 		IF opaddsub='0' OR long_start='1' THEN		--ADD
-			notaddsub_b <= '0'&addsub_b&c_in(0);
+			add_result <= ('0'&addsub_a&c_in(0))+('0'&addsub_b&c_in(0));
 		ELSE					--SUB
-			notaddsub_b <= NOT ('0'&addsub_b&c_in(0));
+			add_result <= ('0'&addsub_a&not c_in(0))-('0'&addsub_b&c_in(0));
 		END IF;
-		add_result <= (('0'&addsub_a&notaddsub_b(0))+notaddsub_b);
 		c_in(1) <= add_result(9) XOR addsub_a(8) XOR addsub_b(8);
 		c_in(2) <= add_result(17) XOR addsub_a(16) XOR addsub_b(16);
 		c_in(3) <= add_result(33);
